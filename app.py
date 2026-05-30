@@ -10,7 +10,7 @@ st.set_page_config(page_title="Gestão de Extintores SP", page_icon="📊", layo
 st.markdown("""
     <style>
     [data-testid="stMetricValue"] { font-size: 24px; font-weight: bold; }
-    div.stButton > button { width: 100%; height: 80px; }
+    div.stButton > button { width: 100%; height: 60px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -63,9 +63,11 @@ with aba_dash:
         elif filtro == "Hidro": st.dataframe(hidro, use_container_width=True)
         else: st.dataframe(df_cadastros, use_container_width=True)
 
-# --- ABA 2: FORMULÁRIO ---
+# --- ABA 2: FORMULÁRIO (Layout Original Restaurado) ---
 with aba_form:
-    num_extintor = st.text_input("Nº do Extintor:", key="f_num").strip()
+    st.subheader("1. Identificação do Equipamento")
+    num_extintor = st.text_input("Digite o Nº do Extintor:", key="f_num").strip()
+
     if num_extintor:
         ext_data = df_cadastros[df_cadastros["Nº Ext."] == num_extintor]
         ja_cadastrado = not ext_data.empty
@@ -73,28 +75,38 @@ with aba_form:
         num_final = str(dados["Nº Ext."]) if ja_cadastrado else num_extintor
 
         if ja_cadastrado:
-            with st.expander("⚠️ Gerenciamento"):
+            st.success(f"✅ Equipamento {num_final} localizado.")
+            with st.expander("⚠️ Área de Gerenciamento"):
                 if st.button("🗑️ Excluir este equipamento"):
                     df_cadastros = df_cadastros[df_cadastros["Nº Ext."] != num_final]
                     conn.update(worksheet="Cadastros", data=df_cadastros)
                     st.rerun()
+        else:
+            st.warning(f"🆕 Equipamento {num_final} não encontrado.")
 
+        st.subheader("2. Ficha Técnica do Equipamento")
         c1, c2, c3 = st.columns(3)
         with c1:
-            loc = st.text_input("Localização:", value=str(dados["Localização"]) if ja_cadastrado else "")
-            tipo = st.selectbox("Tipo:", ["Água", "PQS (Pó Químico)", "CO2", "Espuma Mecânica"], index=0)
+            loc = st.text_input("Localização Física:", value=str(dados["Localização"]) if ja_cadastrado else "")
+            tipo = st.selectbox("Tipo de Carga:", ["Água", "PQS (Pó Químico)", "CO2", "Espuma Mecânica"], index=0)
         with c2:
-            carga = st.text_input("Carga (Kg/L):", value=str(dados["Carga (Kg/L)"]) if ja_cadastrado else "")
-            p_rec = st.date_input("Vencimento Recarga:", value=datetime.today())
+            carga = st.text_input("Capacidade de Carga (Kg/L):", value=str(dados["Carga (Kg/L)"]) if ja_cadastrado else "")
+            p_rec = st.date_input("Vencimento da Recarga:", value=datetime.today())
         with c3:
-            p_teste = st.date_input("Vencimento Teste:", value=datetime.today())
+            p_teste = st.date_input("Vencimento do Teste Hidrostático:", value=datetime.today())
 
-        dt_insp = st.date_input("Data Inspeção:", value=datetime.today())
-        func = st.text_input("Inspetor:")
-        pesagem = st.number_input("Pesagem (Kg):", value=0.0)
-        nc = st.text_area("Anomalias:")
+        st.write("---")
+        st.subheader("3. Checklist de Inspeção Mensal")
+        i1, i2, i3 = st.columns(3)
+        with i1:
+            dt_insp = st.date_input("Data da Inspeção:", value=datetime.today())
+            func = st.text_input("Inspetor / Responsável Técnico:")
+        with i2:
+            pesagem = st.number_input("Massa / Pesagem Atual (Kg):", min_value=0.0, step=0.01)
+        with i3:
+            nc = st.text_area("Registro de Anomalias / Não Conformidades:")
 
-        if st.button("Gravar", type="primary"):
+        if st.button("Gravar Informações e Sincronizar", type="primary"):
             row_cad = {"Nº Ext.": num_final, "Localização": loc, "Tipo": tipo, "Carga (Kg/L)": carga, "Próx. Recarga": str(p_rec), "Próx. Teste": str(p_teste)}
             row_insp = {"Data da Inspeção": str(dt_insp), "Nº Ext.": num_final, "Funcionário": func, "Pesagem": pesagem, "Não Conformidades": nc, "Próx. Recarga": str(p_rec), "Próx. Teste": str(p_teste)}
             
@@ -104,7 +116,7 @@ with aba_form:
             df_inspecoes = pd.concat([df_inspecoes, pd.DataFrame([row_insp])], ignore_index=True)
             conn.update(worksheet="Cadastros", data=df_cadastros)
             conn.update(worksheet="Inspecoes", data=df_inspecoes)
-            st.success("Salvo!")
+            st.success("Salvo com sucesso!")
             st.rerun()
 
 # --- ABA 3: HISTÓRICO ---
