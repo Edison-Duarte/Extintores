@@ -45,9 +45,9 @@ def tratar_data_calculo(v):
 
 def formatar_data_br(v):
     """Formata datas para exibição visual amigável na tabela (DD/MM/AAAA)"""
-    dt = tratar_data_calculo(v)
-    if dt:
-        return dt.strftime("%d/%m/%Y")
+    dt_objeto = tratar_data_calculo(v)
+    if dt_objeto:
+        return dt_objeto.strftime("%d/%m/%Y")
     return str(v) if pd.notna(v) else ""
 
 df_cadastros = limpar_codigo(df_cadastros)
@@ -60,7 +60,7 @@ aba_dash, aba_form, aba_hist = st.tabs(["📊 Dashboard de Gestão", "📝 Nova 
 with aba_dash:
     st.subheader("Painel de Controle e Conformidade Tecnológica")
     
-    if df_cadastros.empty:
+    if df_cadastros is None or df_cadastros.empty:
         st.info("Aguardando os primeiros cadastros para gerar os indicadores comerciais.")
     else:
         hoje = datetime.today().date()
@@ -185,7 +185,7 @@ with aba_form:
         if ja_cadastrado: st.success(f"✅ Equipamento {num_final} localizado na base de dados.")
         else: st.warning(f"🆕 Equipamento {num_final} não encontrado. Iniciando ficha técnica para primeiro cadastro.")
 
-        st.subheader("2. Ficha Técnico do Equipamento")
+        st.subheader("2. Ficha Técnica do Equipamento")
         c1, c2, c3 = st.columns(3)
         with c1:
             loc = st.text_input("Localização Física (Ex: Hangar 1):", value=str(dados["Localização"]) if ja_cadastrado else "")
@@ -204,73 +204,4 @@ with aba_form:
         st.subheader("3. Checklist de Inspeção Mensal (Vistoria)")
         i1, i2, i3 = st.columns(3)
         with i1:
-            dt_insp = st.date_input("Data da Inspeção Atual:", format="DD/MM/YYYY", value=datetime.today().date())
-            func = st.text_input("Inspetor / Responsável Técnico:")
-        with i2:
-            pesagem = st.number_input("Massa / Pesagem Atual (Kg):", min_value=0.0, step=0.01, value=0.0)
-            p_pesagem = dt_insp + timedelta(days=90)
-            st.info(f"📆 Agendamento Automático da Próxima Pesagem: {p_pesagem.strftime('%d/%m/%Y')}")
-        with i3:
-            nao_conf = st.text_area("Registro de Anomalias / Não Conformidades:", placeholder="Lacre rompido, manômetro sem pressão...")
-
-        if st.button("Gravar Informações e Sincronizar", type="primary"):
-            if not func.strip(): 
-                st.error("⚠️ Erro de validação: O nome do Inspetor/Responsável é obrigatório.")
-            else:
-                with st.spinner("Registrando dados criptografados na base em nuvem..."):
-                    if "_tmp" in df_cadastros.columns: 
-                        df_cadastros = df_cadastros.drop(columns=["_tmp"])
-                    
-                    row_cad = {
-                        "Nº Ext.": num_final, 
-                        "Localização": loc, 
-                        "Tipo": tipo_sel, 
-                        "Carga (Kg/L)": carga, 
-                        "Próx. Recarga": str(p_rec), 
-                        "Próx. Teste": str(p_teste)
-                    }
-                    
-                    row_insp = {
-                        "Data da Inspeção": str(dt_insp),
-                        "Nº Ext.": num_final,
-                        "Localização": loc,
-                        "Tipo": tipo_sel,
-                        "Carga (Kg/L)": carga,
-                        "Pesagem": pesagem,
-                        "Próx. Pesagem": str(p_pesagem),
-                        "Próx. Recarga": str(p_rec),
-                        "Próx. Teste": str(p_teste),
-                        "Não Conformidades": nao_conf,
-                        "Funcionário": func
-                    }
-
-                    if ja_cadastrado:
-                        df_cadastros.loc[df_cadastros["Nº Ext."] == num_final, row_cad.keys()] = row_cad.values()
-                    else:
-                        df_cadastros = pd.concat([df_cadastros, pd.DataFrame([row_cad])], ignore_index=True)
-                    
-                    df_inspecoes = pd.concat([df_inspecoes, pd.DataFrame([row_insp])], ignore_index=True)
-                    
-                    try:
-                        conn.update(worksheet="Cadastros", data=df_cadastros)
-                        conn.update(worksheet="Inspecoes", data=df_inspecoes)
-                        st.success(f"Sucesso! Dados do Extintor {num_final} salvos e integrados.")
-                        st.balloons()
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Erro crítico de gravação: {e}")
-
-# --- ABA 3: HISTÓRICO GERAL ---
-with aba_hist:
-    st.subheader("Histórico Retroativo de Vistorias")
-    if not df_inspecoes.empty:
-        df_view = df_inspecoes.copy()
-        
-        colunas_datas_hist = ["Data da Inspeção", "Próx. Pesagem", "Próx. Recarga", "Próx. Teste"]
-        for col in colunas_datas_hist:
-            if col in df_view.columns: 
-                df_view[col] = df_view[col].apply(formatar_data_br)
-        
-        st.dataframe(df_view.iloc[::-1], use_container_width=True, hide_index=True)
-    else:
-        st.info("Nenhum registro histórico disponível nesta unidade.")
+            dt_insp
