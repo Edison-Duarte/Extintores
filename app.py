@@ -27,19 +27,16 @@ def limpar_codigo_extintor(df):
 df_cadastros = limpar_codigo_extintor(df_cadastros)
 df_inspecoes = limpar_codigo_extintor(df_inspecoes)
 
-# --- FUNÇÃO PARA FORMATAR DATAS PARA O PADRÃO BRASILEIRO (DD/MM/AAAA) ---
+# --- FUNÇÃO PARA FORMATAR DATAS PARA O PADRÃO BRASILEIRO (DD/MM/AAAA) NO HISTÓRICO ---
 def formatar_data_br(v):
     if pd.isna(v) or str(v).strip() in ["", "None", "NaN"]:
         return ""
     try:
-        # Se já for um objeto de data/datetime
         if isinstance(v, (datetime, pd.Timestamp)):
             return v.strftime("%d/%m/%Y")
-        # Se for string no formato YYYY-MM-DD
         return datetime.strptime(str(v).split()[0], "%Y-%m-%d").strftime("%d/%m/%Y")
     except:
         try:
-            # Se já estiver no formato DD/MM/AAAA por engano
             return datetime.strptime(str(v).split()[0], "%d/%m/%Y").strftime("%d/%m/%Y")
         except:
             return str(v)
@@ -95,22 +92,26 @@ with aba_inserir:
 
         col1, col2 = st.columns(2)
         with col1:
-            prox_recarga = st.date_input("Próxima Recarga:", value=converter_data_para_input(dados_finais["Próx. Recarga"] if ja_cadastrado else None))
+            # CORREÇÃO: format="DD/MM/YYYY" garante a exibição visual correta no campo
+            prox_recarga = st.date_input("Próxima Recarga:", value=converter_data_para_input(dados_finais["Próx. Recarga"] if ja_cadastrado else None), format="DD/MM/YYYY")
         with col2:
-            prox_teste = st.date_input("Próximo Teste (Hidrostático):", value=converter_data_para_input(dados_finais["Próx. Teste"] if ja_cadastrado else None))
+            # CORREÇÃO: format="DD/MM/YYYY" garante a exibição visual correta no campo
+            prox_teste = st.date_input("Próximo Teste (Hidrostático):", value=converter_data_para_input(dados_finais["Próx. Teste"] if ja_cadastrado else None), format="DD/MM/YYYY")
 
         st.write("---")
         st.subheader("3. Dados da Inspeção Atual")
         
         col_insp1, col_insp2 = st.columns(2)
         with col_insp1:
-            data_inspecao = st.date_input("Data da Inspeção Atual:", value=datetime.today().date())
+            # CORREÇÃO: format="DD/MM/YYYY" incluído aqui também
+            data_inspecao = st.date_input("Data da Inspeção Atual:", value=datetime.today().date(), format="DD/MM/YYYY")
             pesagem = st.number_input("Pesagem Atual (Kg):", min_value=0.0, step=0.05, value=0.0)
             funcionario = st.text_input("Funcionário / Responsável:", placeholder="Digite seu nome completo")
         
         with col_insp2:
             sugestao_pesagem = data_inspecao + timedelta(days=90)
-            prox_pesagem = st.date_input("Próxima Pesagem:", value=sugestao_pesagem)
+            # CORREÇÃO: format="DD/MM/YYYY" incluído aqui também
+            prox_pesagem = st.date_input("Próxima Pesagem:", value=sugestao_pesagem, format="DD/MM/YYYY")
             nao_conformidades = st.text_area("Não Conformidades:", placeholder="Se houver, descreva aqui...")
 
         if st.button("Salvar Registro", type="primary"):
@@ -121,7 +122,6 @@ with aba_inserir:
                     if "_busca_int" in df_cadastros.columns:
                         df_cadastros = df_cadastros.drop(columns=["_busca_int"])
 
-                    # Salvamos no formato padrão do banco (YYYY-MM-DD) para manter a consistência da planilha
                     novo_cadastro = {
                         "Nº Ext.": str(num_extintor_salvamento),
                         "Localização": str(localizacao),
@@ -191,7 +191,6 @@ with aba_historico:
         if df_exibicao.empty:
             st.warning(f"Nenhum registro encontrado para o extintor Nº {filtro_extintor}.")
         else:
-            # Ordenação garantida antes de mudar a exibição para texto brasileiro
             if "Data da Inspeção" in df_exibicao.columns:
                 try:
                     df_exibicao["_data_sort"] = pd.to_datetime(df_exibicao["Data da Inspeção"])
@@ -199,13 +198,11 @@ with aba_historico:
                 except:
                     pass
             
-            # --- CONVERSÃO VISUAL DAS DATAS PARA DD/MM/AAAA ---
             colunas_data = ["Data da Inspeção", "Próx. Recarga", "Próx. Teste", "Próx. Pesagem"]
             for col in colunas_data:
                 if col in df_exibicao.columns:
                     df_exibicao[col] = df_exibicao[col].apply(formatar_data_br)
             
-            # Reorganização opcional para deixar a visualização amigável na tela
             ordem_colunas = [
                 "Data da Inspeção", "Nº Ext.", "Funcionário", "Localização", "Tipo", 
                 "Carga (Kg/L)", "Pesagem", "Próx. Pesagem", "Próx. Recarga", "Próx. Teste", "Não Conformidades"
