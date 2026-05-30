@@ -3,10 +3,9 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import datetime
 
-# Configuração da página - Foco em Gestão Corporativa e Executiva
 st.set_page_config(page_title="Gestão de Extintores SP", page_icon="📊", layout="wide")
 
-# Estilização para os cards e botões ficarem destacados e profissionais
+# Estilização
 st.markdown("""
     <style>
     [data-testid="stMetricValue"] { font-size: 36px; font-weight: bold; }
@@ -16,220 +15,33 @@ st.markdown("""
 
 st.title("🏙️ Sistema de Gestão e Auditoria de Extintores")
 
-# 1. Conexão com o Google Sheets
+# Conexão Sheets
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
     df_cadastros = conn.read(worksheet="Cadastros", ttl=0)
     df_inspecoes = conn.read(worksheet="Inspecoes", ttl=0)
 except Exception as e:
-    st.error("Erro de conexão. Verifique os Secrets e a Planilha.")
+    st.error("Erro de conexão.")
     st.stop()
 
-# --- FUNÇÕES DE PADRONIZAÇÃO E LIMPEZA ---
-def limpar_codigo(df):
-    if df is not None and not df.empty and "Nº Ext." in df.columns:
-        df["Nº Ext."] = df["Nº Ext."].astype(str).str.strip().apply(lambda x: x[:-2] if x.endswith(".0") else x)
-    return df
+# --- ABAS ---
+aba_dash, aba_form, aba_hist = st.tabs(["📊 Dashboard", "📝 Nova Inspeção", "📋 Histórico"])
 
-def tratar_data_calculo(v):
-    if pd.isna(v) or str(v).strip() in ["", "None", "NaN"]: 
-        return None
-    for formato in ("%Y-%m-%d", "%d/%m/%Y"):
-        try:
-            return datetime.datetime.strptime(str(v).strip().split()[0], formato).date()
-        except ValueError:
-            continue
-    return None
-
-def formatar_data_br(v):
-    dt_objeto = tratar_data_calculo(v)
-    if dt_objeto:
-        return dt_objeto.strftime("%d/%m/%Y")
-    return str(v) if pd.notna(v) else ""
-
-df_cadastros = limpar_codigo(df_cadastros)
-df_inspecoes = limpar_codigo(df_inspecoes)
-
-# 2. SISTEMA DE ABAS
-aba_dash, aba_form, aba_hist = st.tabs(["📊 Dashboard de Gestão", "📝 Nova Inspeção / Cadastro", "📋 Histórico Geral"])
-
-# --- ABA 1: DASHBOARD (COM GRÁFICOS NATIVOS ESTÁVEIS) ---
 with aba_dash:
-    st.subheader("Painel de Controle e Conformidade Tecnológica")
+    # ... (mantenha sua lógica de cálculo de datas aqui) ...
     
-    if df_cadastros is None or df_cadastros.empty:
-        st.info("Aguardando os primeiros cadastros para gerar os indicadores.")
-    else:
-        hoje = datetime.date.today()
-        alerta_30 = hoje + datetime.timedelta(days=30)
-
-        df_calc = df_cadastros.copy()
-        df_calc['dt_recarga_limpa'] = df_calc['Próx. Recarga'].apply(tratar_data_calculo)
-        df_calc['dt_teste_limpa'] = df_calc['Próx. Teste'].apply(tratar_data_calculo)
-
-        recarga_vencida = df_calc[df_calc['dt_recarga_limpa'] < hoje]
-        recarga_alerta = df_calc[(df_calc['dt_recarga_limpa'] >= hoje) & (df_calc['dt_recarga_limpa'] <= alerta_30)]
-        teste_vencido = df_calc[df_calc['dt_teste_limpa'] < hoje]
-
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Total Equipamentos", len(df_cadastros))
-        m2.metric("Recarga Vencida 🔴", len(recarga_vencida))
-        m3.metric("Vence em 30 dias 🟡", len(recarga_alerta))
-        m4.metric("Teste Hidro. Vencido ❌", len(teste_vencido))
-
-        st.write("---")
+    # Substitua os gráficos Plotly por estes nativos:
+    st.subheader("📈 Análise Visual")
+    g1, g2 = st.columns(2)
+    
+    with g1:
+        st.write("Status dos Equipamentos")
+        # Gráfico nativo estável
+        st.bar_chart(df_calc["Status"].value_counts())
         
-        st.subheader("📈 Análise Visual da Distribuição e Prazos")
-        g1, g2 = st.columns(2)
-        
-        with g1:
-            st.markdown("**Status Geral de Validade dos Equipamentos**")
-            def categorizar_status(row):
-                if row['dt_recarga_limpa'] and row['dt_recarga_limpa'] < hoje: return "🔴 Vencidos"
-                if row['dt_teste_limpa'] and row['dt_teste_limpa'] < hoje: return "❌ Teste Hidro. Vencido"
-                if row['dt_recarga_limpa'] and row['dt_recarga_limpa'] <= alerta_30: return "🟡 Alerta (30 dias)"
-                return "✅ Em Conformidade"
+    with g2:
+        st.write("Inventário por Tipo")
+        # Gráfico nativo estável
+        st.bar_chart(df_calc["Tipo"].value_counts())
 
-            df_calc["Status"] = df_calc.apply(categorizar_status, axis=1)
-            df_status_count = df_calc["Status"].value_counts()
-            
-            # Gráfico de barras nativo para os Status
-            st.bar_chart(df_status_count, color="#d32f2f")
-
-        with g2:
-            st.markdown("**Inventário de Equipamentos por Tipo de Carga**")
-            df_tipo_count = df_calc["Tipo"].value_counts()
-            
-            # Gráfico de barras nativo para os Tipos
-            st.bar_chart(df_tipo_count, color="#1f77b4")
-
-        st.write("---")
-        
-        df_alertas = df_calc[
-            (df_calc['dt_recarga_limpa'] < hoje) | 
-            (df_calc['dt_teste_limpa'] < hoje) | 
-            ((df_calc['dt_recarga_limpa'] >= hoje) & (df_calc['dt_recarga_limpa'] <= alerta_30))
-        ].copy()
-
-        if not df_alertas.empty:
-            st.subheader("⚠️ Plano de Ação - Equipamentos que Exigem Atenção Imediata")
-            df_alertas["Próx. Recarga"] = df_alertas["Próx. Recarga"].apply(formatar_data_br)
-            df_alertas["Próx. Teste"] = df_alertas["Próx. Teste"].apply(formatar_data_br)
-            df_alertas["Status Auditoria"] = df_alertas.apply(lambda r: "🔴 Recarga Vencida" if r['dt_recarga_limpa'] < hoje else ("❌ Teste Hidro. Vencido" if r['dt_teste_limpa'] < hoje else "🟡 Próximo ao Vencimento"), axis=1)
-            
-            colunas_dash = ["Nº Ext.", "Localização", "Tipo", "Próx. Recarga", "Próx. Teste", "Status Auditoria"]
-            st.dataframe(df_alertas[colunas_dash], use_container_width=True, hide_index=True)
-        else:
-            st.success("✅ Excelente! Todos os extintores da instalação estão 100% em conformidade com as normas vigentes.")
-
-# --- ABA 2: FORMULÁRIO ---
-with aba_form:
-    st.subheader("1. Identificação do Equipamento")
-    num_extintor = st.text_input("Digite o Nº do Extintor (ex: 02):", key="f_num").strip()
-
-    if num_extintor:
-        try:
-            num_int = int(float(num_extintor))
-            def try_int(x):
-                try: return int(float(x))
-                except: return -1
-            df_cadastros["_tmp"] = df_cadastros["Nº Ext."].apply(try_int)
-            ext_data = df_cadastros[df_cadastros["_tmp"] == num_int]
-        except:
-            ext_data = df_cadastros[df_cadastros["Nº Ext."] == num_extintor]
-
-        ja_cadastrado = not ext_data.empty
-        dados = ext_data.iloc[0] if ja_cadastrado else None
-        num_final = str(dados["Nº Ext."]) if ja_cadastrado else num_extintor
-
-        st.write("---")
-        if ja_cadastrado: st.success(f"✅ Equipamento {num_final} localizado na base de dados.")
-        else: st.warning(f"🆕 Equipamento {num_final} não encontrado. Iniciando ficha técnica para primeiro cadastro.")
-
-        st.subheader("2. Ficha Técnica do Equipamento")
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            loc = st.text_input("Localização Física (Ex: Hangar 1):", value=str(dados["Localização"]) if ja_cadastrado else "")
-            lista_tipos = ["Água", "PQS (Pó Químico)", "CO2", "Espuma Mecânica"]
-            idx_tipo = lista_tipos.index(dados["Tipo"]) if ja_cadastrado and dados["Tipo"] in lista_tipos else 0
-            tipo_sel = st.selectbox("Tipo de Carga:", lista_tipos, index=idx_tipo)
-        with c2:
-            carga = st.text_input("Capacidade de Carga (Kg/L):", value=str(dados["Carga (Kg/L)"]) if ja_cadastrado else "")
-            dt_rec_inicial = tratar_data_calculo(dados["Próx. Recarga"]) if ja_cadastrado else datetime.date.today()
-            p_rec = st.date_input("Vencimento da Recarga:", format="DD/MM/YYYY", value=dt_rec_inicial if dt_rec_inicial else datetime.date.today())
-        with c3:
-            dt_test_inicial = tratar_data_calculo(dados["Próx. Teste"]) if ja_cadastrado else datetime.date.today()
-            p_teste = st.date_input("Vencimento do Teste Hidrostático:", format="DD/MM/YYYY", value=dt_test_inicial if dt_test_inicial else datetime.date.today())
-
-        st.write("---")
-        st.subheader("3. Checklist de Inspeção Mensal (Vistoria)")
-        i1, i2, i3 = st.columns(3)
-        with i1:
-            dt_insp = st.date_input("Data da Inspeção Atual:", format="DD/MM/YYYY", value=datetime.date.today())
-            func = st.text_input("Inspetor / Responsável Técnico:")
-        with i2:
-            pesagem = st.number_input("Massa / Pesagem Atual (Kg):", min_value=0.0, step=0.01, value=0.0)
-            p_pesagem = dt_insp + datetime.timedelta(days=90)
-            st.info(f"📆 Agendamento Automático da Próxima Pesagem: {p_pesagem.strftime('%d/%m/%Y')}")
-        with i3:
-            nao_conf = st.text_area("Registro de Anomalias / Não Conformidades:", placeholder="Lacre rompido, manômetro sem pressão...")
-
-        if st.button("Gravar Informações e Sincronizar", type="primary"):
-            if not func.strip(): 
-                st.error("⚠️ Erro de validação: O nome do Inspetor/Responsável é obrigatório.")
-            else:
-                with st.spinner("Registrando dados na base em nuvem..."):
-                    if "_tmp" in df_cadastros.columns: 
-                        df_cadastros = df_cadastros.drop(columns=["_tmp"])
-                    
-                    row_cad = {
-                        "Nº Ext.": num_final, 
-                        "Localização": loc, 
-                        "Tipo": tipo_sel, 
-                        "Carga (Kg/L)": carga, 
-                        "Próx. Recarga": str(p_rec), 
-                        "Próx. Teste": str(p_teste)
-                    }
-                    
-                    row_insp = {
-                        "Data da Inspeção": str(dt_insp),
-                        "Nº Ext.": num_final,
-                        "Localização": loc,
-                        "Tipo": tipo_sel,
-                        "Carga (Kg/L)": carga,
-                        "Pesagem": pesagem,
-                        "Próx. Pesagem": str(p_pesagem),
-                        "Próx. Recarga": str(p_rec),
-                        "Próx. Teste": str(p_teste),
-                        "Não Conformidades": nao_conf,
-                        "Funcionário": func
-                    }
-
-                    if ja_cadastrado:
-                        df_cadastros.loc[df_cadastros["Nº Ext."] == num_final, row_cad.keys()] = row_cad.values()
-                    else:
-                        df_cadastros = pd.concat([df_cadastros, pd.DataFrame([row_cad])], ignore_index=True)
-                    
-                    df_inspecoes = pd.concat([df_inspecoes, pd.DataFrame([row_insp])], ignore_index=True)
-                    
-                    try:
-                        conn.update(worksheet="Cadastros", data=df_cadastros)
-                        conn.update(worksheet="Inspecoes", data=df_inspecoes)
-                        st.success(f"Sucesso! Dados do Extintor {num_final} salvos e integrados.")
-                        st.balloons()
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Erro crítico de gravação: {e}")
-
-# --- ABA 3: HISTÓRICO GERAL ---
-with aba_hist:
-    st.subheader("Histórico Retroativo de Vistorias")
-    if df_inspecoes is not None and not df_inspecoes.empty:
-        df_view = df_inspecoes.copy()
-        colunas_datas_hist = ["Data da Inspeção", "Próx. Pesagem", "Próx. Recarga", "Próx. Teste"]
-        for col in colunas_datas_hist:
-            if col in df_view.columns: 
-                df_view[col] = df_view[col].apply(formatar_data_br)
-        st.dataframe(df_view.iloc[::-1], use_container_width=True, hide_index=True)
-    else:
-        st.info("Nenhum registro histórico disponível nesta unidade.")
+# ... (restante do seu código inalterado) ...
