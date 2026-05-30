@@ -63,7 +63,7 @@ with aba_dash:
         elif filtro == "Hidro": st.dataframe(hidro, use_container_width=True)
         else: st.dataframe(df_cadastros, use_container_width=True)
 
-# --- ABA 2: FORMULÁRIO (Layout Original Restaurado) ---
+# --- ABA 2: FORMULÁRIO (Layout Restaurado com Quadro de Aviso) ---
 with aba_form:
     st.subheader("1. Identificação do Equipamento")
     num_extintor = st.text_input("Digite o Nº do Extintor:", key="f_num").strip()
@@ -103,12 +103,15 @@ with aba_form:
             func = st.text_input("Inspetor / Responsável Técnico:")
         with i2:
             pesagem = st.number_input("Massa / Pesagem Atual (Kg):", min_value=0.0, step=0.01)
+            # AQUI O QUADRO DE AVISO VOLTOU:
+            p_pesagem = dt_insp + timedelta(days=90)
+            st.info(f"📆 Próxima Pesagem: {p_pesagem.strftime('%d/%m/%Y')}")
         with i3:
             nc = st.text_area("Registro de Anomalias / Não Conformidades:")
 
         if st.button("Gravar Informações e Sincronizar", type="primary"):
             row_cad = {"Nº Ext.": num_final, "Localização": loc, "Tipo": tipo, "Carga (Kg/L)": carga, "Próx. Recarga": str(p_rec), "Próx. Teste": str(p_teste)}
-            row_insp = {"Data da Inspeção": str(dt_insp), "Nº Ext.": num_final, "Funcionário": func, "Pesagem": pesagem, "Não Conformidades": nc, "Próx. Recarga": str(p_rec), "Próx. Teste": str(p_teste)}
+            row_insp = {"Data da Inspeção": str(dt_insp), "Nº Ext.": num_final, "Funcionário": func, "Pesagem": pesagem, "Não Conformidades": nc, "Próx. Pesagem": str(p_pesagem), "Próx. Recarga": str(p_rec), "Próx. Teste": str(p_teste)}
             
             if ja_cadastrado: df_cadastros.loc[df_cadastros["Nº Ext."] == num_final, row_cad.keys()] = row_cad.values()
             else: df_cadastros = pd.concat([df_cadastros, pd.DataFrame([row_cad])], ignore_index=True)
