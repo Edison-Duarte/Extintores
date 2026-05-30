@@ -104,7 +104,7 @@ with aba_form:
         i1, i2, i3 = st.columns(3)
         with i1:
             dt_insp = st.date_input("Data da Inspeção:", value=datetime.today())
-            func = st.text_input("Inspetor / Responsável Técnico:")
+            func = st.text_input("Inspetor / Responsável Técnico: *") # Adicionado asterisco
         with i2:
             pesagem = st.number_input("Massa / Pesagem Atual (Kg):", min_value=0.0, step=0.01)
             p_pesagem = dt_insp + timedelta(days=90)
@@ -113,33 +113,51 @@ with aba_form:
             nc = st.text_area("Registro de Anomalias / Não Conformidades:")
 
         if st.button("Gravar Informações e Sincronizar", type="primary"):
-            row_cad = {"Nº Ext.": num_final, "Localização": loc, "Tipo": tipo, "Carga (Kg/L)": carga, "Próx. Recarga": str(p_rec), "Próx. Teste": str(p_teste)}
-            
-            # Aqui garantimos que os dados (Localização, Tipo, Carga) entrem na linha de histórico
-            row_insp = {
-                "Data da Inspeção": str(dt_insp), 
-                "Nº Ext.": num_final, 
-                "Localização": loc, 
-                "Tipo": tipo, 
-                "Carga (Kg/L)": carga, 
-                "Funcionário": func, 
-                "Pesagem": pesagem, 
-                "Não Conformidades": nc, 
-                "Próx. Pesagem": str(p_pesagem), 
-                "Próx. Recarga": str(p_rec), 
-                "Próx. Teste": str(p_teste)
-            }
-            
-            if ja_cadastrado: df_cadastros.loc[df_cadastros["Nº Ext."] == num_final, row_cad.keys()] = row_cad.values()
-            else: df_cadastros = pd.concat([df_cadastros, pd.DataFrame([row_cad])], ignore_index=True)
-            
-            df_inspecoes = pd.concat([df_inspecoes, pd.DataFrame([row_insp])], ignore_index=True)
-            conn.update(worksheet="Cadastros", data=df_cadastros)
-            conn.update(worksheet="Inspecoes", data=df_inspecoes)
-            st.success("Salvo com sucesso!")
-            st.rerun()
+            # Validação do campo obrigatório
+            if not func:
+                st.error("⚠️ O campo 'Inspetor / Responsável Técnico' é obrigatório!")
+            else:
+                row_cad = {"Nº Ext.": num_final, "Localização": loc, "Tipo": tipo, "Carga (Kg/L)": carga, "Próx. Recarga": str(p_rec), "Próx. Teste": str(p_teste)}
+                row_insp = {
+                    "Data da Inspeção": str(dt_insp), "Nº Ext.": num_final, "Localização": loc, "Tipo": tipo, 
+                    "Carga (Kg/L)": carga, "Funcionário": func, "Pesagem": pesagem, "Não Conformidades": nc, 
+                    "Próx. Pesagem": str(p_pesagem), "Próx. Recarga": str(p_rec), "Próx. Teste": str(p_teste)
+                }
+                
+                if ja_cadastrado: df_cadastros.loc[df_cadastros["Nº Ext."] == num_final, row_cad.keys()] = row_cad.values()
+                else: df_cadastros = pd.concat([df_cadastros, pd.DataFrame([row_cad])], ignore_index=True)
+                
+                df_inspecoes = pd.concat([df_inspecoes, pd.DataFrame([row_insp])], ignore_index=True)
+                conn.update(worksheet="Cadastros", data=df_cadastros)
+                conn.update(worksheet="Inspecoes", data=df_inspecoes)
+                st.success("Salvo com sucesso!")
+                st.rerun()
 
-# --- ABA 3: HISTÓRICO ---
+# --- ABA 3: HISTÓRICO COM FILTROS ---
 with aba_hist:
     st.subheader("📋 Histórico Retroativo de Vistorias")
-    st.dataframe(df_inspecoes.iloc[::-1], use_container_width=True, hide_index=True)
+    f1, f2, f3 = st.columns(3)
+    with f1: 
+        filtro_num = st.text_input("🔍 Busca por Nº Extintor:")
+        filtro_loc = st.multiselect("📍 Localização:", df_inspecoes["Localização"].unique() if "Localização" in df_inspecoes else [])
+    with f2: 
+        filtro_tipo = st.multiselect("🔥 Tipo de Carga:", df_inspecoes["Tipo"].unique() if "Tipo" in df_inspecoes else [])
+        filtro_func = st.selectbox("👤 Inspetor:", ["Todos"] + list(df_inspecoes["Funcionário"].unique()))
+    with f3: 
+        filtro_nc = st.text_input("⚠️ Busca em Não Conformidades:")
+        status_v = st.selectbox("📅 Prazo", ["Todos", "Vencidos", "Próximos (30d)"])
+
+    df_view = df_inspecoes.copy()
+    if filtro_num: df_view = df_view[df_view["Nº Ext."].astype(str).str.contains(filtro_num, case=False)]
+    if filtro_loc: df_view = df_view[df_view["Localização"].isin(filtro_loc)]
+    if filtro_tipo: df_view = df_view[df_view["Tipo"].isin(filtro_tipo)]
+    if filtro_func != "Todos": df_view = df_view[df_view["Funcionário"] == filtro_func]
+    if filtro_nc: df_view = df_view[df_inspecoes["Não Conformidades"].astype(str).str.contains(filtro_nc, case=False)]
+    
+    if status_v != "Todos":
+        df_view["dt_rec"] = pd.to_datetime(df_view["Próx. Recarga"]).dt.date
+        hoje = datetime.today().date()
+        if status_v == "Vencidos": df_view = df_view[df_view["dt_rec"] < hoje]
+        else: df_view = df_view[(df_view["dt_rec"] >= hoje) & (df_view["dt_rec"] <= hoje + timedelta(30))]
+    
+    st.dataframe(df_view.iloc[::-1], use_container_width=True, hide_index=True)
