@@ -53,6 +53,9 @@ with aba_dash:
         hidro_vencido = df_calc[df_calc['dt_tes'] < hoje]
         hidro_proximo = df_calc[(df_calc['dt_tes'] >= hoje) & (df_calc['dt_tes'] <= alerta_30)]
 
+        # COLUNAS EXIBIDAS NO DASHBOARD (Sem Pesagem, Próx. Pesagem e Não Conformidades)
+        colunas_dash = ["Nº Ext.", "Localização", "Tipo", "Carga (Kg/L)", "Próx. Recarga", "Próx. Teste"]
+
         cols = st.columns(5)
         if cols[0].button(f"Total\n{len(df_cadastros)}"): st.session_state.filtro = "Todos"
         if cols[1].button(f"Vencidos 🔴\n{len(vencidos)}"): st.session_state.filtro = "Vencidos"
@@ -61,11 +64,11 @@ with aba_dash:
         if cols[4].button(f"Hidro Prox ao Vencimento ⚠️\n{len(hidro_proximo)}"): st.session_state.filtro = "HidroProx"
 
         filtro = getattr(st.session_state, 'filtro', 'Todos')
-        if filtro == "Vencidos": st.dataframe(vencidos, use_container_width=True)
-        elif filtro == "Proximos": st.dataframe(proximos, use_container_width=True)
-        elif filtro == "HidroVencido": st.dataframe(hidro_vencido, use_container_width=True)
-        elif filtro == "HidroProx": st.dataframe(hidro_proximo, use_container_width=True)
-        else: st.dataframe(df_cadastros, use_container_width=True)
+        if filtro == "Vencidos": st.dataframe(vencidos[colunas_dash], use_container_width=True)
+        elif filtro == "Proximos": st.dataframe(proximos[colunas_dash], use_container_width=True)
+        elif filtro == "HidroVencido": st.dataframe(hidro_vencido[colunas_dash], use_container_width=True)
+        elif filtro == "HidroProx": st.dataframe(hidro_proximo[colunas_dash], use_container_width=True)
+        else: st.dataframe(df_cadastros[colunas_dash], use_container_width=True)
 
 # --- ABA 2: FORMULÁRIO ---
 with aba_form:
@@ -118,8 +121,19 @@ with aba_form:
 # --- ABA 3: HISTÓRICO ---
 with aba_hist:
     st.subheader("📋 Histórico Retroativo de Vistorias")
+    
+    # Filtros do Histórico de volta
     f1, f2, f3 = st.columns(3)
     busca = f1.text_input("🔍 Busca por Nº Extintor:")
+    
     df_view = df_inspecoes.copy()
-    if busca: df_view = df_view[df_view["Nº Ext."].astype(str).str.contains(busca, case=False)]
-    st.dataframe(df_view.iloc[::-1], use_container_width=True, hide_index=True)
+    if busca: 
+        df_view = df_view[df_view["Nº Ext."].astype(str).str.contains(busca, case=False)]
+    
+    # COLUNAS EXIBIDAS NO HISTÓRICO (Retirado Pesagem, Próx. Pesagem e Não Conformidades)
+    colunas_historico = ["Data da Inspeção", "Nº Ext.", "Funcionário", "Localização", "Tipo", "Carga (Kg/L)", "Próx. Recarga", "Próx. Teste"]
+    
+    # Garante que só filtramos colunas que realmente existem para evitar erros de renderização
+    colunas_finais = [c for c in colunas_historico if c in df_view.columns]
+    
+    st.dataframe(df_view[colunas_finais].iloc[::-1], use_container_width=True, hide_index=True)
