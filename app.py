@@ -37,33 +37,37 @@ df_inspecoes = limpar_codigo(df_inspecoes)
 # Abas
 aba_dash, aba_form, aba_hist = st.tabs(["📊 Dashboard Interativo", "📝 Nova Inspeção / Cadastro", "📋 Histórico Geral"])
 
-# --- ABA 1: DASHBOARD ---
+# --- ABA 1: DASHBOARD INTERATIVO ---
 with aba_dash:
     st.subheader("Painel de Controle")
     if not df_cadastros.empty:
         hoje = datetime.today().date()
         alerta_30 = hoje + timedelta(days=30)
+        
         df_calc = df_cadastros.copy()
         df_calc['dt_rec'] = pd.to_datetime(df_calc['Próx. Recarga']).dt.date
         df_calc['dt_tes'] = pd.to_datetime(df_calc['Próx. Teste']).dt.date
 
         vencidos = df_calc[df_calc['dt_rec'] < hoje]
         proximos = df_calc[(df_calc['dt_rec'] >= hoje) & (df_calc['dt_rec'] <= alerta_30)]
-        hidro = df_calc[df_calc['dt_tes'] < hoje]
+        hidro_vencido = df_calc[df_calc['dt_tes'] < hoje]
+        hidro_proximo = df_calc[(df_calc['dt_tes'] >= hoje) & (df_calc['dt_tes'] <= alerta_30)]
 
-        cols = st.columns(4)
+        cols = st.columns(5)
         if cols[0].button(f"Total\n{len(df_cadastros)}"): st.session_state.filtro = "Todos"
         if cols[1].button(f"Vencidos 🔴\n{len(vencidos)}"): st.session_state.filtro = "Vencidos"
-        if cols[2].button(f"30 Dias 🟡\n{len(proximos)}"): st.session_state.filtro = "Proximos"
-        if cols[3].button(f"Teste Hidro ❌\n{len(hidro)}"): st.session_state.filtro = "Hidro"
+        if cols[2].button(f"Prox. Recarga 🟡\n{len(proximos)}"): st.session_state.filtro = "Proximos"
+        if cols[3].button(f"Hidro Vencido ❌\n{len(hidro_vencido)}"): st.session_state.filtro = "HidroVencido"
+        if cols[4].button(f"Hidro 30d ⚠️\n{len(hidro_proximo)}"): st.session_state.filtro = "HidroProx"
 
         filtro = getattr(st.session_state, 'filtro', 'Todos')
         if filtro == "Vencidos": st.dataframe(vencidos, use_container_width=True)
         elif filtro == "Proximos": st.dataframe(proximos, use_container_width=True)
-        elif filtro == "Hidro": st.dataframe(hidro, use_container_width=True)
+        elif filtro == "HidroVencido": st.dataframe(hidro_vencido, use_container_width=True)
+        elif filtro == "HidroProx": st.dataframe(hidro_proximo, use_container_width=True)
         else: st.dataframe(df_cadastros, use_container_width=True)
 
-# --- ABA 2: FORMULÁRIO (Layout Original + Pesagem) ---
+# --- ABA 2: FORMULÁRIO ---
 with aba_form:
     st.subheader("1. Identificação do Equipamento")
     num_extintor = st.text_input("Digite o Nº do Extintor:", key="f_num").strip()
@@ -127,9 +131,9 @@ with aba_hist:
     f1, f2, f3 = st.columns(3)
     with f1: 
         filtro_num = st.text_input("🔍 Busca por Nº Extintor:")
-        filtro_loc = st.multiselect("📍 Localização:", df_inspecoes["Localização"].unique())
+        filtro_loc = st.multiselect("📍 Localização:", df_inspecoes["Localização"].unique() if "Localização" in df_inspecoes else [])
     with f2: 
-        filtro_tipo = st.multiselect("🔥 Tipo de Carga:", df_inspecoes["Tipo"].unique())
+        filtro_tipo = st.multiselect("🔥 Tipo de Carga:", df_inspecoes["Tipo"].unique() if "Tipo" in df_inspecoes else [])
         filtro_func = st.selectbox("👤 Inspetor:", ["Todos"] + list(df_inspecoes["Funcionário"].unique()))
     with f3: 
         filtro_nc = st.text_input("⚠️ Busca em Não Conformidades:")
@@ -140,7 +144,7 @@ with aba_hist:
     if filtro_loc: df_view = df_view[df_view["Localização"].isin(filtro_loc)]
     if filtro_tipo: df_view = df_view[df_view["Tipo"].isin(filtro_tipo)]
     if filtro_func != "Todos": df_view = df_view[df_view["Funcionário"] == filtro_func]
-    if filtro_nc: df_view = df_view[df_view["Não Conformidades"].astype(str).str.contains(filtro_nc, case=False)]
+    if filtro_nc: df_view = df_view[df_inspecoes["Não Conformidades"].astype(str).str.contains(filtro_nc, case=False)]
     
     if status_v != "Todos":
         df_view["dt_rec"] = pd.to_datetime(df_view["Próx. Recarga"]).dt.date
@@ -149,20 +153,3 @@ with aba_hist:
         else: df_view = df_view[(df_view["dt_rec"] >= hoje) & (df_view["dt_rec"] <= hoje + timedelta(30))]
     
     st.dataframe(df_view.iloc[::-1], use_container_width=True, hide_index=True)
-
-# --- ASSINATURA FINALIZADA COM FONTE GABRIOLA ---
-st.markdown("---")
-
-st.markdown(
-    """
-    <div style='text-align: center; margin-top: 100px;'>
-        <p style='margin-bottom: -8px; font-family: "Gabriola", serif; font-style: italic; font-size: 18px; color: #0056b3;'>
-            Developed by:
-        </p>
-        <p style='font-family: "Gabriola", serif; font-size: 20px; font-weight: 100; color: #1e7044;'>
-            Edison Duarte Filho®
-        </p>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
