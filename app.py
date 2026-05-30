@@ -10,7 +10,7 @@ st.set_page_config(page_title="Gestão de Extintores SP", page_icon="📊", layo
 st.markdown("""
     <style>
     [data-testid="stMetricValue"] { font-size: 24px; font-weight: bold; }
-    div.stButton > button { width: 100%; height: 60px; }
+    div.stButton > button { width: 100%; height: 75px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -55,10 +55,10 @@ with aba_dash:
 
         cols = st.columns(5)
         if cols[0].button(f"Total\n{len(df_cadastros)}"): st.session_state.filtro = "Todos"
-        if cols[1].button(f"Vencidos\n{len(vencidos)}"): st.session_state.filtro = "Vencidos"
-        if cols[2].button(f"Prox. ao Vencimento\n{len(proximos)}"): st.session_state.filtro = "Proximos"
-        if cols[3].button(f"Hidro Vencido\n{len(hidro_vencido)}"): st.session_state.filtro = "HidroVencido"
-        if cols[4].button(f"Hidro Prox ao Vencimento\n{len(hidro_proximo)}"): st.session_state.filtro = "HidroProx"
+        if cols[1].button(f"Vencidos 🔴\n{len(vencidos)}"): st.session_state.filtro = "Vencidos"
+        if cols[2].button(f"Prox. ao Vencimento 🟡\n{len(proximos)}"): st.session_state.filtro = "Proximos"
+        if cols[3].button(f"Hidro Vencido ❌\n{len(hidro_vencido)}"): st.session_state.filtro = "HidroVencido"
+        if cols[4].button(f"Hidro Prox ao Vencimento ⚠️\n{len(hidro_proximo)}"): st.session_state.filtro = "HidroProx"
 
         filtro = getattr(st.session_state, 'filtro', 'Todos')
         if filtro == "Vencidos": st.dataframe(vencidos, use_container_width=True)
