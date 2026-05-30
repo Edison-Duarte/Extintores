@@ -122,18 +122,46 @@ with aba_form:
 with aba_hist:
     st.subheader("📋 Histórico Retroativo de Vistorias")
     
-    # Filtros do Histórico de volta
-    f1, f2, f3 = st.columns(3)
-    busca = f1.text_input("🔍 Busca por Nº Extintor:")
+    # --- FILTROS COMPLETOS RESTAURADOS ---
+    col1, col2, col3 = st.columns(3)
+    busca_id = col1.text_input("🔍 Busca por Nº Extintor:")
     
+    tipos_disponiveis = ["Todos"] + list(df_inspecoes["Tipo"].dropna().unique()) if not df_inspecoes.empty else ["Todos"]
+    busca_tipo = col2.selectbox("🔥 Tipo de Carga:", tipos_disponiveis)
+    
+    busca_nc = col3.text_input("⚠️ Busca em Não Conformidades:")
+
+    col4, col5, col6 = st.columns(3)
+    loc_disponiveis = ["Todos"] + list(df_inspecoes["Localização"].dropna().unique()) if not df_inspecoes.empty else ["Todos"]
+    busca_loc = col4.selectbox("📍 Localização:", loc_disponiveis)
+    
+    insp_disponiveis = ["Todos"] + list(df_inspecoes["Funcionário"].dropna().unique()) if not df_inspecoes.empty else ["Todos"]
+    busca_insp = col5.selectbox("👤 Inspetor:", insp_disponiveis)
+    
+    busca_prazo = col6.selectbox("📅 Prazo", ["Todos", "Vencidos (Recarga)", "Vencidos (Teste)"])
+
+    # Aplicação dos Filtros no DataFrame de Visualização
     df_view = df_inspecoes.copy()
-    if busca: 
-        df_view = df_view[df_view["Nº Ext."].astype(str).str.contains(busca, case=False)]
     
-    # COLUNAS EXIBIDAS NO HISTÓRICO (Retirado Pesagem, Próx. Pesagem e Não Conformidades)
+    if busca_id:
+        df_view = df_view[df_view["Nº Ext."].astype(str).str.contains(busca_id, case=False)]
+    if busca_tipo != "Todos":
+        df_view = df_view[df_view["Tipo"] == busca_tipo]
+    if busca_nc:
+        df_view = df_view[df_view["Não Conformidades"].astype(str).str.contains(busca_nc, case=False)]
+    if busca_loc != "Todos":
+        df_view = df_view[df_view["Localização"] == busca_loc]
+    if busca_insp != "Todos":
+        df_view = df_view[df_view["Funcionário"] == busca_insp]
+        
+    hoje_filtrar = datetime.today().date()
+    if busca_prazo == "Vencidos (Recarga)":
+        df_view = df_view[pd.to_datetime(df_view["Próx. Recarga"]).dt.date < hoje_filtrar]
+    elif busca_prazo == "Vencidos (Teste)":
+        df_view = df_view[pd.to_datetime(df_view["Próx. Teste"]).dt.date < hoje_filtrar]
+
+    # COLUNAS EXIBIDAS NO HISTÓRICO (Sem Pesagem, Próx. Pesagem e Não Conformidades)
     colunas_historico = ["Data da Inspeção", "Nº Ext.", "Funcionário", "Localização", "Tipo", "Carga (Kg/L)", "Próx. Recarga", "Próx. Teste"]
-    
-    # Garante que só filtramos colunas que realmente existem para evitar erros de renderização
     colunas_finais = [c for c in colunas_historico if c in df_view.columns]
     
     st.dataframe(df_view[colunas_finais].iloc[::-1], use_container_width=True, hide_index=True)
