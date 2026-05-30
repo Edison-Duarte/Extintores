@@ -20,14 +20,26 @@ except Exception as e:
 # --- FUNÇÃO DE LIMPEZA E PADRONIZAÇÃO ---
 def limpar_codigo_extintor(df):
     if "Nº Ext." in df.columns:
-        # Remove espaços e garante que seja string
         df["Nº Ext."] = df["Nº Ext."].astype(str).str.strip()
-        # Remove o .0 caso o pandas tenha lido como float descuidado
         df["Nº Ext."] = df["Nº Ext."].apply(lambda x: x[:-2] if x.endswith(".0") else x)
     return df
 
 df_cadastros = limpar_codigo_extintor(df_cadastros)
 df_inspecoes = limpar_codigo_extintor(df_inspecoes)
+
+# --- FUNÇÃO PARA FORMATAR DATAS PARA O PADRÃO BRASILEIRO (DD/MM/AAAA) NO HISTÓRICO ---
+def formatar_data_br(v):
+    if pd.isna(v) or str(v).strip() in ["", "None", "NaN"]:
+        return ""
+    try:
+        if isinstance(v, (datetime, pd.Timestamp)):
+            return v.strftime("%d/%m/%Y")
+        return datetime.strptime(str(v).split()[0], "%Y-%m-%d").strftime("%d/%m/%Y")
+    except:
+        try:
+            return datetime.strptime(str(v).split()[0], "%d/%m/%Y").strftime("%d/%m/%Y")
+        except:
+            return str(v)
 
 # Abas de navegação
 aba_inserir, aba_historico = st.tabs(["📝 Nova Inspeção / Cadastro", "📊 Histórico de Inspeções"])
@@ -38,20 +50,15 @@ with aba_inserir:
     num_extintor = st.text_input("Nº Extintor:", key="num_ext_input").strip()
 
     if num_extintor:
-        # --- LÓGICA DE BUSCA INTELIGENTE (Trata 02, 2, 002 como iguais) ---
+        # Lógica de busca inteligente (02, 2, 002 como iguais)
         try:
-            # Tenta converter o número digitado para inteiro (ex: "02" vira 2)
             num_digitado_int = int(float(num_extintor))
-            
-            # Tenta converter a coluna inteira do banco para comparar numericamente
             def converter_para_int_seguro(x):
                 try: return int(float(x))
                 except: return -1
-
             df_cadastros["_busca_int"] = df_cadastros["Nº Ext."].apply(converter_para_int_seguro)
             extintor_existente = df_cadastros[df_cadastros["_busca_int"] == num_digitado_int]
         except ValueError:
-            # Caso o código do extintor tenha letras (ex: "EXT-01"), faz a busca por texto exato
             extintor_existente = df_cadastros[df_cadastros["Nº Ext."] == num_extintor]
 
         ja_cadastrado = not extintor_existente.empty
@@ -60,7 +67,6 @@ with aba_inserir:
         if ja_cadastrado:
             st.success(f"✅ Extintor Nº {num_extintor} localizado! Carregando dados do último registro...")
             dados_finais = extintor_existente.iloc[0]
-            # Atualiza a variável principal com o formato exato que estava no banco para manter consistência
             num_extintor_salvamento = str(dados_finais["Nº Ext."])
         else:
             st.warning(f"🆕 Extintor Nº {num_extintor} não encontrado. Preencha os campos para realizar o primeiro cadastro.")
@@ -75,30 +81,37 @@ with aba_inserir:
         tipo = st.selectbox("Tipo:", lista_tipos, index=index_tipo)
         carga = st.text_input("Carga (Kg/L):", value=str(dados_finais["Carga (Kg/L)"]) if ja_cadastrado else "")
 
-        def converter_data(valor_data):
-            if ja_cadastrado and pd.notna(valor_data) and valor_data != "":
-                try: return datetime.strptime(str(valor_data), "%Y-%m-%d").date()
-                except: return datetime.today().date()
+        def converter_data_para_input(valor_data):
+            if ja_cadastrado and pd.notna(valor_data) and str(valor_data).strip() not in ["", "None"]:
+                for formato in ("%Y-%m-%d", "%d/%m/%Y"):
+                    try: 
+                        return datetime.strptime(str(valor_data).split()[0], formato).date()
+                    except ValueError: 
+                        continue
             return datetime.today().date()
 
         col1, col2 = st.columns(2)
         with col1:
-            prox_recarga = st.date_input("Próxima Recarga:", value=converter_data(dados_finais["Próx. Recarga"] if ja_cadastrado else None))
+            # CORREÇÃO: format="DD/MM/YYYY" garante a exibição visual correta no campo
+            prox_recarga = st.date_input("Próxima Recarga:", value=converter_data_para_input(dados_finais["Próx. Recarga"] if ja_cadastrado else None), format="DD/MM/YYYY")
         with col2:
-            prox_teste = st.date_input("Próximo Teste (Hidrostático):", value=converter_data(dados_finais["Próx. Teste"] if ja_cadastrado else None))
+            # CORREÇÃO: format="DD/MM/YYYY" garante a exibição visual correta no campo
+            prox_teste = st.date_input("Próximo Teste (Hidrostático):", value=converter_data_para_input(dados_finais["Próx. Teste"] if ja_cadastrado else None), format="DD/MM/YYYY")
 
         st.write("---")
         st.subheader("3. Dados da Inspeção Atual")
         
         col_insp1, col_insp2 = st.columns(2)
         with col_insp1:
-            data_inspecao = st.date_input("Data da Inspeção Atual:", value=datetime.today().date())
+            # CORREÇÃO: format="DD/MM/YYYY" incluído aqui também
+            data_inspecao = st.date_input("Data da Inspeção Atual:", value=datetime.today().date(), format="DD/MM/YYYY")
             pesagem = st.number_input("Pesagem Atual (Kg):", min_value=0.0, step=0.05, value=0.0)
             funcionario = st.text_input("Funcionário / Responsável:", placeholder="Digite seu nome completo")
         
         with col_insp2:
             sugestao_pesagem = data_inspecao + timedelta(days=90)
-            prox_pesagem = st.date_input("Próxima Pesagem:", value=sugestao_pesagem)
+            # CORREÇÃO: format="DD/MM/YYYY" incluído aqui também
+            prox_pesagem = st.date_input("Próxima Pesagem:", value=sugestao_pesagem, format="DD/MM/YYYY")
             nao_conformidades = st.text_area("Não Conformidades:", placeholder="Se houver, descreva aqui...")
 
         if st.button("Salvar Registro", type="primary"):
@@ -106,7 +119,6 @@ with aba_inserir:
                 st.error("⚠️ Por favor, preencha o campo 'Funcionário / Responsável' antes de salvar.")
             else:
                 with st.spinner("Salvando dados na planilha..."):
-                    # Remove coluna temporária de busca antes de salvar para não sujar a planilha
                     if "_busca_int" in df_cadastros.columns:
                         df_cadastros = df_cadastros.drop(columns=["_busca_int"])
 
@@ -165,7 +177,6 @@ with aba_historico:
         df_exibicao = df_inspecoes.copy()
         
         if filtro_extintor:
-            # Filtro inteligente no histórico também
             try:
                 filtro_int = int(float(filtro_extintor))
                 def converter_para_int_seguro(x):
@@ -182,11 +193,23 @@ with aba_historico:
         else:
             if "Data da Inspeção" in df_exibicao.columns:
                 try:
-                    df_exibicao["Data da Inspeção"] = pd.to_datetime(df_exibicao["Data da Inspeção"]).dt.date
-                    df_exibicao = df_exibicao.sort_values(by="Data da Inspeção", ascending=False)
+                    df_exibicao["_data_sort"] = pd.to_datetime(df_exibicao["Data da Inspeção"])
+                    df_exibicao = df_exibicao.sort_values(by="_data_sort", ascending=False).drop(columns=["_data_sort"])
                 except:
                     pass
             
+            colunas_data = ["Data da Inspeção", "Próx. Recarga", "Próx. Teste", "Próx. Pesagem"]
+            for col in colunas_data:
+                if col in df_exibicao.columns:
+                    df_exibicao[col] = df_exibicao[col].apply(formatar_data_br)
+            
+            ordem_colunas = [
+                "Data da Inspeção", "Nº Ext.", "Funcionário", "Localização", "Tipo", 
+                "Carga (Kg/L)", "Pesagem", "Próx. Pesagem", "Próx. Recarga", "Próx. Teste", "Não Conformidades"
+            ]
+            colunas_existentes = [c for c in ordem_colunas if c in df_exibicao.columns]
+            df_exibicao = df_exibicao[colunas_existentes]
+
             st.dataframe(df_exibicao, use_container_width=True, hide_index=True)
 
 # --- ASSINATURA FINALIZADA COM FONTE GABRIOLA ---
