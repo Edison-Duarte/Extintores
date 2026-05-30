@@ -3,228 +3,127 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime, timedelta
 
-# Configuração da página do Streamlit
-st.set_page_config(page_title="Controle de Extintores", page_icon="🧯", layout="wide")
+# Configuração da página - Layout focado em Gestão Corporativa
+st.set_page_config(page_title="Gestão de Extintores SP", page_icon="📊", layout="wide")
 
-st.title("🧯 Controle e Inspeção de Extintores")
+# Estilização CSS para métricas ficarem com cores de alerta
+st.markdown("""
+    <style>
+    [data-testid="stMetricValue"] { font-size: 40px; }
+    </style>
+    """, unsafe_allow_html=True)
 
-# 1. Conexão com o Google Sheets utilizando os Secrets
+st.title("🏙️ Sistema de Gestão e Auditoria de Extintores")
+
+# 1. Conexão com o Google Sheets
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
     df_cadastros = conn.read(worksheet="Cadastros", ttl=0)
     df_inspecoes = conn.read(worksheet="Inspecoes", ttl=0)
 except Exception as e:
-    st.error("Erro ao conectar à planilha. Verifique as credenciais.")
+    st.error("Erro de conexão. Verifique os Secrets e a Planilha.")
     st.stop()
 
-# --- FUNÇÃO DE LIMPEZA E PADRONIZAÇÃO ---
-def limpar_codigo_extintor(df):
-    if "Nº Ext." in df.columns:
-        df["Nº Ext."] = df["Nº Ext."].astype(str).str.strip()
-        df["Nº Ext."] = df["Nº Ext."].apply(lambda x: x[:-2] if x.endswith(".0") else x)
+# --- FUNÇÕES DE PADRONIZAÇÃO ---
+def limpar_codigo(df):
+    if not df.empty and "Nº Ext." in df.columns:
+        df["Nº Ext."] = df["Nº Ext."].astype(str).str.strip().apply(lambda x: x[:-2] if x.endswith(".0") else x)
     return df
 
-df_cadastros = limpar_codigo_extintor(df_cadastros)
-df_inspecoes = limpar_codigo_extintor(df_inspecoes)
-
-# --- FUNÇÃO PARA FORMATAR DATAS PARA O PADRÃO BRASILEIRO (DD/MM/AAAA) NO HISTÓRICO ---
 def formatar_data_br(v):
-    if pd.isna(v) or str(v).strip() in ["", "None", "NaN"]:
-        return ""
+    if pd.isna(v) or str(v).strip() in ["", "None", "NaN"]: return ""
     try:
-        if isinstance(v, (datetime, pd.Timestamp)):
-            return v.strftime("%d/%m/%Y")
+        if isinstance(v, (datetime, pd.Timestamp)): return v.strftime("%d/%m/%Y")
         return datetime.strptime(str(v).split()[0], "%Y-%m-%d").strftime("%d/%m/%Y")
-    except:
-        try:
-            return datetime.strptime(str(v).split()[0], "%d/%m/%Y").strftime("%d/%m/%Y")
-        except:
-            return str(v)
+    except: return str(v)
 
-# Abas de navegação
-aba_inserir, aba_historico = st.tabs(["📝 Nova Inspeção / Cadastro", "📊 Histórico de Inspeções"])
+df_cadastros = limpar_codigo(df_cadastros)
+df_inspecoes = limpar_codigo(df_inspecoes)
 
-# --- ABA 1: INSERIR OU ATUALIZAR INSPEÇÃO ---
-with aba_inserir:
-    st.subheader("1. Identificação")
-    num_extintor = st.text_input("Nº Extintor:", key="num_ext_input").strip()
+# 2. ABAS DO SISTEMA
+aba_dash, aba_form, aba_hist = st.tabs(["📊 Dashboard de Gestão", "📝 Nova Inspeção / Cadastro", "📋 Histórico Geral"])
+
+# --- ABA 1: DASHBOARD (O DIFERENCIAL COMERCIAL) ---
+with aba_dash:
+    st.subheader("Torre de Controle - Status de Conformidade")
+    
+    if df_cadastros.empty:
+        st.info("Aguardando os primeiros cadastros para gerar indicadores.")
+    else:
+        # Cálculos de Datas
+        hoje = datetime.today().date()
+        alerta_30 = hoje + timedelta(days=30)
+
+        # Converter colunas para datetime para cálculo
+        df_cadastros['dt_recarga'] = pd.to_datetime(df_cadastros['Próx. Recarga']).dt.date
+        df_cadastros['dt_teste'] = pd.to_datetime(df_cadastros['Próx. Teste']).dt.date
+
+        # Métricas Recarga
+        recarga_vencida = df_cadastros[df_cadastros['dt_recarga'] < hoje]
+        recarga_alerta = df_cadastros[(df_cadastros['dt_recarga'] >= hoje) & (df_cadastros['dt_recarga'] <= alerta_30)]
+
+        # Métricas Teste Hidrostático
+        teste_vencido = df_cadastros[df_cadastros['dt_teste'] < hoje]
+
+        # Exibição de Cards
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Total de Extintores", len(df_cadastros))
+        m2.metric("Recargas Vencidas", len(recarga_vencida), delta_color="inverse")
+        m3.metric("Recargas Próx. 30 dias", len(recarga_alerta))
+        m4.metric("Teste Hidro. Vencido", len(teste_vencido))
+
+        st.write("---")
+        
+        # Tabela de Ação Imediata
+        if len(recarga_vencida) > 0 or len(teste_vencido) > 0:
+            st.error("⚠️ Atenção: Equipamentos fora de conformidade encontrados!")
+            acoes = pd.concat([recarga_vencida, teste_vencido]).drop_duplicates().copy()
+            
+            # Formatar para exibição
+            for col in ["Próx. Recarga", "Próx. Teste"]:
+                acoes[col] = acoes[col].apply(formatar_data_br)
+            
+            st.dataframe(acoes[["Nº Ext.", "Localização", "Tipo", "Próx. Recarga", "Próx. Teste"]], use_container_width=True, hide_index=True)
+        else:
+            st.success("✅ Todos os equipamentos estão dentro do prazo de validade.")
+
+# --- ABA 2: FORMULÁRIO (A OPERAÇÃO) ---
+with aba_form:
+    st.subheader("1. Identificação do Equipamento")
+    num_extintor = st.text_input("Digite o Nº do Extintor (ex: 02):", key="f_num").strip()
 
     if num_extintor:
-        # Lógica de busca inteligente (02, 2, 002 como iguais)
+        # Busca inteligente (trata 02 como 2)
         try:
-            num_digitado_int = int(float(num_extintor))
-            def converter_para_int_seguro(x):
+            num_int = int(float(num_extintor))
+            def try_int(x):
                 try: return int(float(x))
                 except: return -1
-            df_cadastros["_busca_int"] = df_cadastros["Nº Ext."].apply(converter_para_int_seguro)
-            extintor_existente = df_cadastros[df_cadastros["_busca_int"] == num_digitado_int]
-        except ValueError:
-            extintor_existente = df_cadastros[df_cadastros["Nº Ext."] == num_extintor]
+            df_cadastros["_tmp"] = df_cadastros["Nº Ext."].apply(try_int)
+            ext_data = df_cadastros[df_cadastros["_tmp"] == num_int]
+        except:
+            ext_data = df_cadastros[df_cadastros["Nº Ext."] == num_extintor]
 
-        ja_cadastrado = not extintor_existente.empty
-
-        st.write("---")
-        if ja_cadastrado:
-            st.success(f"✅ Extintor Nº {num_extintor} localizado! Carregando dados do último registro...")
-            dados_finais = extintor_existente.iloc[0]
-            num_extintor_salvamento = str(dados_finais["Nº Ext."])
-        else:
-            st.warning(f"🆕 Extintor Nº {num_extintor} não encontrado. Preencha os campos para realizar o primeiro cadastro.")
-            dados_finais = None
-            num_extintor_salvamento = num_extintor
-
-        st.subheader("2. Informações do Equipamento")
-        
-        localizacao = st.text_input("Localização:", value=str(dados_finais["Localização"]) if ja_cadastrado else "")
-        lista_tipos = ["Água", "PQS (Pó Químico)", "CO2", "Espuma Mecânica"]
-        index_tipo = lista_tipos.index(dados_finais["Tipo"]) if ja_cadastrado and dados_finais["Tipo"] in lista_tipos else 0
-        tipo = st.selectbox("Tipo:", lista_tipos, index=index_tipo)
-        carga = st.text_input("Carga (Kg/L):", value=str(dados_finais["Carga (Kg/L)"]) if ja_cadastrado else "")
-
-        def converter_data_para_input(valor_data):
-            if ja_cadastrado and pd.notna(valor_data) and str(valor_data).strip() not in ["", "None"]:
-                for formato in ("%Y-%m-%d", "%d/%m/%Y"):
-                    try: 
-                        return datetime.strptime(str(valor_data).split()[0], formato).date()
-                    except ValueError: 
-                        continue
-            return datetime.today().date()
-
-        col1, col2 = st.columns(2)
-        with col1:
-            # CORREÇÃO: format="DD/MM/YYYY" garante a exibição visual correta no campo
-            prox_recarga = st.date_input("Próxima Recarga:", value=converter_data_para_input(dados_finais["Próx. Recarga"] if ja_cadastrado else None), format="DD/MM/YYYY")
-        with col2:
-            # CORREÇÃO: format="DD/MM/YYYY" garante a exibição visual correta no campo
-            prox_teste = st.date_input("Próximo Teste (Hidrostático):", value=converter_data_para_input(dados_finais["Próx. Teste"] if ja_cadastrado else None), format="DD/MM/YYYY")
+        ja_cadastrado = not ext_data.empty
+        dados = ext_data.iloc[0] if ja_cadastrado else None
+        num_final = str(dados["Nº Ext."]) if ja_cadastrado else num_extintor
 
         st.write("---")
-        st.subheader("3. Dados da Inspeção Atual")
-        
-        col_insp1, col_insp2 = st.columns(2)
-        with col_insp1:
-            # CORREÇÃO: format="DD/MM/YYYY" incluído aqui também
-            data_inspecao = st.date_input("Data da Inspeção Atual:", value=datetime.today().date(), format="DD/MM/YYYY")
-            pesagem = st.number_input("Pesagem Atual (Kg):", min_value=0.0, step=0.05, value=0.0)
-            funcionario = st.text_input("Funcionário / Responsável:", placeholder="Digite seu nome completo")
-        
-        with col_insp2:
-            sugestao_pesagem = data_inspecao + timedelta(days=90)
-            # CORREÇÃO: format="DD/MM/YYYY" incluído aqui também
-            prox_pesagem = st.date_input("Próxima Pesagem:", value=sugestao_pesagem, format="DD/MM/YYYY")
-            nao_conformidades = st.text_area("Não Conformidades:", placeholder="Se houver, descreva aqui...")
+        if ja_cadastrado: st.success(f"Equipamento {num_final} carregado.")
+        else: st.warning(f"Equipamento {num_final} não cadastrado.")
 
-        if st.button("Salvar Registro", type="primary"):
-            if not funcionario.strip():
-                st.error("⚠️ Por favor, preencha o campo 'Funcionário / Responsável' antes de salvar.")
-            else:
-                with st.spinner("Salvando dados na planilha..."):
-                    if "_busca_int" in df_cadastros.columns:
-                        df_cadastros = df_cadastros.drop(columns=["_busca_int"])
+        st.subheader("2. Ficha Técnica")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            loc = st.text_input("Localização:", value=str(dados["Localização"]) if ja_cadastrado else "")
+            tipo_sel = st.selectbox("Tipo:", ["Água", "PQS", "CO2", "Espuma"], index=0)
+        with c2:
+            carga = st.text_input("Carga:", value=str(dados["Carga (Kg/L)"]) if ja_cadastrado else "")
+            p_rec = st.date_input("Próx. Recarga:", format="DD/MM/YYYY", value=pd.to_datetime(dados["Próx. Recarga"]).date() if ja_cadastrado else datetime.today().date())
+        with c3:
+            p_teste = st.date_input("Próx. Teste Hidro.:", format="DD/MM/YYYY", value=pd.to_datetime(dados["Próx. Teste"]).date() if ja_cadastrado else datetime.today().date())
 
-                    novo_cadastro = {
-                        "Nº Ext.": str(num_extintor_salvamento),
-                        "Localização": str(localizacao),
-                        "Tipo": str(tipo),
-                        "Carga (Kg/L)": str(carga),
-                        "Próx. Recarga": str(prox_recarga),
-                        "Próx. Teste": str(prox_teste)
-                    }
-                    
-                    nova_inspecao = {
-                        "Data da Inspeção": str(data_inspecao),
-                        "Nº Ext.": str(num_extintor_salvamento),
-                        "Localização": str(localizacao),
-                        "Tipo": str(tipo),
-                        "Carga (Kg/L)": str(carga),
-                        "Próx. Recarga": str(prox_recarga),
-                        "Próx. Teste": str(prox_teste),
-                        "Pesagem": float(pesagem),
-                        "Próx. Pesagem": str(prox_pesagem),
-                        "Não Conformidades": str(nao_conformidades),
-                        "Funcionário": str(funcionario)
-                    }
-                    
-                    if ja_cadastrado:
-                        df_cadastros.loc[df_cadastros["Nº Ext."] == num_extintor_salvamento, ["Localização", "Tipo", "Carga (Kg/L)", "Próx. Recarga", "Próx. Teste"]] = [
-                            str(localizacao), str(tipo), str(carga), str(prox_recarga), str(prox_teste)
-                        ]
-                    else:
-                        df_cadastros = pd.concat([df_cadastros, pd.DataFrame([novo_cadastro])], ignore_index=True)
-                    
-                    df_inspecoes = pd.concat([df_inspecoes, pd.DataFrame([nova_inspecao])], ignore_index=True)
-                    
-                    df_cadastros = limpar_codigo_extintor(df_cadastros)
-                    df_inspecoes = limpar_codigo_extintor(df_inspecoes)
-                    
-                    try:
-                        conn.update(worksheet="Cadastros", data=df_cadastros)
-                        conn.update(worksheet="Inspecoes", data=df_inspecoes)
-                        st.success(f"Dados do Extintor {num_extintor_salvamento} salvos com sucesso!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Erro ao gravar os dados na planilha: {e}")
-
-# --- ABA 2: VISUALIZAR O HISTÓRICO COMPLETO ---
-with aba_historico:
-    st.subheader("📋 Histórico Completo de Inspeções Realizadas")
-    
-    if df_inspecoes.empty:
-        st.info("Nenhuma inspeção foi registrada ainda.")
-    else:
-        filtro_extintor = st.text_input("Filtrar histórico por Nº do Extintor (Deixe em branco para ver todos):", value="", key="filtro_hist").strip()
-        
-        df_exibicao = df_inspecoes.copy()
-        
-        if filtro_extintor:
-            try:
-                filtro_int = int(float(filtro_extintor))
-                def converter_para_int_seguro(x):
-                    try: return int(float(x))
-                    except: return -1
-                df_exibicao["_filtro_int"] = df_exibicao["Nº Ext."].apply(converter_para_int_seguro)
-                df_exibicao = df_exibicao[df_exibicao["_filtro_int"] == filtro_int]
-                df_exibicao = df_exibicao.drop(columns=["_filtro_int"])
-            except ValueError:
-                df_exibicao = df_exibicao[df_exibicao["Nº Ext."] == filtro_extintor]
-            
-        if df_exibicao.empty:
-            st.warning(f"Nenhum registro encontrado para o extintor Nº {filtro_extintor}.")
-        else:
-            if "Data da Inspeção" in df_exibicao.columns:
-                try:
-                    df_exibicao["_data_sort"] = pd.to_datetime(df_exibicao["Data da Inspeção"])
-                    df_exibicao = df_exibicao.sort_values(by="_data_sort", ascending=False).drop(columns=["_data_sort"])
-                except:
-                    pass
-            
-            colunas_data = ["Data da Inspeção", "Próx. Recarga", "Próx. Teste", "Próx. Pesagem"]
-            for col in colunas_data:
-                if col in df_exibicao.columns:
-                    df_exibicao[col] = df_exibicao[col].apply(formatar_data_br)
-            
-            ordem_colunas = [
-                "Data da Inspeção", "Nº Ext.", "Funcionário", "Localização", "Tipo", 
-                "Carga (Kg/L)", "Pesagem", "Próx. Pesagem", "Próx. Recarga", "Próx. Teste", "Não Conformidades"
-            ]
-            colunas_existentes = [c for c in ordem_colunas if c in df_exibicao.columns]
-            df_exibicao = df_exibicao[colunas_existentes]
-
-            st.dataframe(df_exibicao, use_container_width=True, hide_index=True)
-
-# --- ASSINATURA FINALIZADA COM FONTE GABRIOLA ---
-st.markdown("---")
-
-st.markdown(
-    """
-    <div style='text-align: center; margin-top: 100px;'>
-        <p style='margin-bottom: -8px; font-family: "Gabriola", serif; font-style: italic; font-size: 18px; color: #0056b3;'>
-            Developed by:
-        </p>
-        <p style='font-family: "Gabriola", serif; font-size: 20px; font-weight: 100; color: #1e7044;'>
-            Edison Duarte Filho®
-        </p>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+        st.subheader("3. Inspeção Mensal (Vistoria)")
+        i1, i2, i3 = st.columns(3)
+        with i1:
+            dt
