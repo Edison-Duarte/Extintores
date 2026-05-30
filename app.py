@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 # Configuração da página
 st.set_page_config(page_title="Gestão de Extintores SP", page_icon="📊", layout="wide")
 
-# Estilização
+# Estilização profissional
 st.markdown("""
     <style>
     [data-testid="stMetricValue"] { font-size: 38px; font-weight: bold; }
@@ -43,11 +43,11 @@ with aba_dash:
     if not df_cadastros.empty:
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Total Equipamentos", len(df_cadastros))
-        m2.metric("Recarga Vencida 🔴", "Verificar") # Simplificado para performance
+        m2.metric("Recarga Vencida 🔴", "Verificar") 
         m3.metric("Vencem em 30d 🟡", "Verificar")
         m4.metric("Teste Hidro. Vencido ❌", "Verificar")
 
-# --- ABA 2: FORMULÁRIO (Layout Original) ---
+# --- ABA 2: FORMULÁRIO COM EXCLUSÃO ---
 with aba_form:
     st.subheader("1. Identificação do Equipamento")
     num_extintor = st.text_input("Digite o Nº do Extintor:", key="f_num").strip()
@@ -105,7 +105,23 @@ with aba_form:
             st.success("Dados salvos com sucesso!")
             st.rerun()
 
-# --- ABA 3: HISTÓRICO ---
+# --- ABA 3: HISTÓRICO COM FILTROS ---
 with aba_hist:
-    st.subheader("Histórico Retroativo de Vistorias")
-    st.dataframe(df_inspecoes.iloc[::-1], use_container_width=True)
+    st.subheader("📋 Histórico Retroativo de Vistorias")
+    if not df_inspecoes.empty:
+        c_f1, c_f2 = st.columns(2)
+        with c_f1:
+            filtro_num = st.text_input("🔍 Filtrar pelo Nº do Extintor:")
+        with c_f2:
+            opcoes_func = ["Todos"] + list(df_inspecoes["Funcionário"].unique())
+            filtro_func = st.selectbox("👤 Filtrar por Inspetor:", opcoes_func)
+        
+        df_view = df_inspecoes.copy()
+        if filtro_num:
+            df_view = df_view[df_view["Nº Ext."].astype(str).str.contains(filtro_num, case=False)]
+        if filtro_func != "Todos":
+            df_view = df_view[df_view["Funcionário"] == filtro_func]
+        
+        st.dataframe(df_view.iloc[::-1], use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhum registro histórico disponível.")
