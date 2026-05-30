@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 # Configuração da página
 st.set_page_config(page_title="Gestão de Extintores SP", page_icon="📊", layout="wide")
 
-# Estilização profissional
+# Estilização
 st.markdown("""
     <style>
     [data-testid="stMetricValue"] { font-size: 38px; font-weight: bold; }
@@ -92,7 +92,7 @@ with aba_form:
 
         if st.button("Gravar Informações e Sincronizar", type="primary"):
             row_cad = {"Nº Ext.": num_final, "Localização": loc, "Tipo": tipo_sel, "Carga (Kg/L)": carga, "Próx. Recarga": str(p_rec), "Próx. Teste": str(p_teste)}
-            row_insp = {"Data da Inspeção": str(dt_insp), "Nº Ext.": num_final, "Funcionário": func, "Pesagem": pesagem, "Não Conformidades": nao_conf}
+            row_insp = {"Data da Inspeção": str(dt_insp), "Nº Ext.": num_final, "Funcionário": func, "Pesagem": pesagem, "Não Conformidades": nao_conf, "Próx. Recarga": str(p_rec), "Próx. Teste": str(p_teste)}
             
             if ja_cadastrado:
                 df_cadastros.loc[df_cadastros["Nº Ext."] == num_final, row_cad.keys()] = row_cad.values()
@@ -105,23 +105,42 @@ with aba_form:
             st.success("Dados salvos com sucesso!")
             st.rerun()
 
-# --- ABA 3: HISTÓRICO COM FILTROS ---
+# --- ABA 3: HISTÓRICO COM FILTROS AVANÇADOS ---
 with aba_hist:
     st.subheader("📋 Histórico Retroativo de Vistorias")
+    
     if not df_inspecoes.empty:
-        c_f1, c_f2 = st.columns(2)
-        with c_f1:
-            filtro_num = st.text_input("🔍 Filtrar pelo Nº do Extintor:")
-        with c_f2:
-            opcoes_func = ["Todos"] + list(df_inspecoes["Funcionário"].unique())
-            filtro_func = st.selectbox("👤 Filtrar por Inspetor:", opcoes_func)
-        
+        f1, f2, f3 = st.columns(3)
+        with f1:
+            filtro_num = st.text_input("🔍 Busca por Nº Extintor:")
+            filtro_loc = st.multiselect("📍 Localização:", df_inspecoes["Localização"].unique())
+        with f2:
+            filtro_tipo = st.multiselect("🔥 Tipo de Carga:", df_inspecoes["Tipo"].unique())
+            filtro_func = st.selectbox("👤 Inspetor:", ["Todos"] + list(df_inspecoes["Funcionário"].unique()))
+        with f3:
+            filtro_nc = st.text_input("⚠️ Busca em Não Conformidades:")
+            status_vencimento = st.selectbox("📅 Status de Prazo:", ["Todos", "🔴 Vencidos (Recarga)", "🟡 Próximos ao Vencimento (30d)"])
+
         df_view = df_inspecoes.copy()
-        if filtro_num:
-            df_view = df_view[df_view["Nº Ext."].astype(str).str.contains(filtro_num, case=False)]
-        if filtro_func != "Todos":
-            df_view = df_view[df_view["Funcionário"] == filtro_func]
+        hoje = datetime.today().date()
+        alerta_30 = hoje + timedelta(days=30)
+
+        # Filtros
+        if filtro_num: df_view = df_view[df_view["Nº Ext."].astype(str).str.contains(filtro_num, case=False)]
+        if filtro_loc: df_view = df_view[df_view["Localização"].isin(filtro_loc)]
+        if filtro_tipo: df_view = df_view[df_view["Tipo"].isin(filtro_tipo)]
+        if filtro_func != "Todos": df_view = df_view[df_view["Funcionário"] == filtro_func]
+        if filtro_nc: df_view = df_view[df_view["Não Conformidades"].astype(str).str.contains(filtro_nc, case=False)]
         
+        # Filtro de Status de Vencimento
+        if status_vencimento != "Todos":
+            df_view["dt_rec"] = pd.to_datetime(df_view["Próx. Recarga"]).dt.date
+            if status_vencimento == "🔴 Vencidos (Recarga)":
+                df_view = df_view[df_view["dt_rec"] < hoje]
+            else:
+                df_view = df_view[(df_view["dt_rec"] >= hoje) & (df_view["dt_rec"] <= alerta_30)]
+        
+        st.write(f"Exibindo {len(df_view)} registros:")
         st.dataframe(df_view.iloc[::-1], use_container_width=True, hide_index=True)
     else:
         st.info("Nenhum registro histórico disponível.")
