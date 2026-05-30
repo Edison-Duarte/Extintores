@@ -63,7 +63,7 @@ with aba_dash:
         elif filtro == "Hidro": st.dataframe(hidro, use_container_width=True)
         else: st.dataframe(df_cadastros, use_container_width=True)
 
-# --- ABA 2: FORMULÁRIO (Layout Restaurado com Quadro de Aviso) ---
+# --- ABA 2: FORMULÁRIO (Layout Original + Pesagem) ---
 with aba_form:
     st.subheader("1. Identificação do Equipamento")
     num_extintor = st.text_input("Digite o Nº do Extintor:", key="f_num").strip()
@@ -103,7 +103,6 @@ with aba_form:
             func = st.text_input("Inspetor / Responsável Técnico:")
         with i2:
             pesagem = st.number_input("Massa / Pesagem Atual (Kg):", min_value=0.0, step=0.01)
-            # AQUI O QUADRO DE AVISO VOLTOU:
             p_pesagem = dt_insp + timedelta(days=90)
             st.info(f"📆 Próxima Pesagem: {p_pesagem.strftime('%d/%m/%Y')}")
         with i3:
@@ -122,16 +121,27 @@ with aba_form:
             st.success("Salvo com sucesso!")
             st.rerun()
 
-# --- ABA 3: HISTÓRICO ---
+# --- ABA 3: HISTÓRICO COM FILTROS COMPLETOS ---
 with aba_hist:
+    st.subheader("📋 Histórico Retroativo de Vistorias")
     f1, f2, f3 = st.columns(3)
-    with f1: filtro_num = st.text_input("🔍 Nº Extintor")
-    with f2: filtro_func = st.selectbox("👤 Inspetor", ["Todos"] + list(df_inspecoes["Funcionário"].unique()))
-    with f3: status_v = st.selectbox("📅 Prazo", ["Todos", "Vencidos", "Próximos (30d)"])
+    with f1: 
+        filtro_num = st.text_input("🔍 Busca por Nº Extintor:")
+        filtro_loc = st.multiselect("📍 Localização:", df_inspecoes["Localização"].unique())
+    with f2: 
+        filtro_tipo = st.multiselect("🔥 Tipo de Carga:", df_inspecoes["Tipo"].unique())
+        filtro_func = st.selectbox("👤 Inspetor:", ["Todos"] + list(df_inspecoes["Funcionário"].unique()))
+    with f3: 
+        filtro_nc = st.text_input("⚠️ Busca em Não Conformidades:")
+        status_v = st.selectbox("📅 Prazo", ["Todos", "Vencidos", "Próximos (30d)"])
 
     df_view = df_inspecoes.copy()
-    if filtro_num: df_view = df_view[df_view["Nº Ext."].astype(str).str.contains(filtro_num)]
+    if filtro_num: df_view = df_view[df_view["Nº Ext."].astype(str).str.contains(filtro_num, case=False)]
+    if filtro_loc: df_view = df_view[df_view["Localização"].isin(filtro_loc)]
+    if filtro_tipo: df_view = df_view[df_view["Tipo"].isin(filtro_tipo)]
     if filtro_func != "Todos": df_view = df_view[df_view["Funcionário"] == filtro_func]
+    if filtro_nc: df_view = df_view[df_view["Não Conformidades"].astype(str).str.contains(filtro_nc, case=False)]
+    
     if status_v != "Todos":
         df_view["dt_rec"] = pd.to_datetime(df_view["Próx. Recarga"]).dt.date
         hoje = datetime.today().date()
