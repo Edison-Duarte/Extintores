@@ -2,7 +2,6 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import datetime
-import plotly.express as px
 
 # Configuração da página - Foco em Gestão Corporativa e Executiva
 st.set_page_config(page_title="Gestão de Extintores SP", page_icon="📊", layout="wide")
@@ -54,7 +53,7 @@ df_inspecoes = limpar_codigo(df_inspecoes)
 # 2. SISTEMA DE ABAS
 aba_dash, aba_form, aba_hist = st.tabs(["📊 Dashboard de Gestão", "📝 Nova Inspeção / Cadastro", "📋 Histórico Geral"])
 
-# --- ABA 1: DASHBOARD ---
+# --- ABA 1: DASHBOARD (COM GRÁFICOS NATIVOS ESTÁVEIS) ---
 with aba_dash:
     st.subheader("Painel de Controle e Conformidade Tecnológica")
     
@@ -84,51 +83,25 @@ with aba_dash:
         g1, g2 = st.columns(2)
         
         with g1:
+            st.markdown("**Status Geral de Validade dos Equipamentos**")
             def categorizar_status(row):
-                if row['dt_recarga_limpa'] and row['dt_recarga_limpa'] < hoje: return "🔴 Recarga Vencida"
+                if row['dt_recarga_limpa'] and row['dt_recarga_limpa'] < hoje: return "🔴 Vencidos"
                 if row['dt_teste_limpa'] and row['dt_teste_limpa'] < hoje: return "❌ Teste Hidro. Vencido"
-                if row['dt_recarga_limpa'] and row['dt_recarga_limpa'] <= alerta_30: return "🟡 Próximo ao Vencimento (30d)"
+                if row['dt_recarga_limpa'] and row['dt_recarga_limpa'] <= alerta_30: return "🟡 Alerta (30 dias)"
                 return "✅ Em Conformidade"
 
-            df_calc["Status Visão Geral"] = df_calc.apply(categorizar_status, axis=1)
-            df_status_count = df_calc["Status Visão Geral"].value_counts().reset_index()
-            df_status_count.columns = ["Status", "Quantidade"]
+            df_calc["Status"] = df_calc.apply(categorizar_status, axis=1)
+            df_status_count = df_calc["Status"].value_counts()
             
-            cores_status = {
-                "✅ Em Conformidade": "#2e7d32",
-                "🟡 Próximo ao Vencimento (30d)": "#f9a825",
-                "🔴 Recarga Vencida": "#c62828",
-                "❌ Teste Hidro. Vencido": "#e53935"
-            }
-            
-            fig_donut = px.pie(
-                df_status_count, 
-                values="Quantidade", 
-                names="Status", 
-                hole=0.5,
-                title="Status Geral da Incolumidade (AVCB)",
-                color="Status",
-                color_discrete_map=cores_status
-            )
-            fig_donut.update_traces(textinfo='value+percent')
-            st.plotly_chart(fig_donut, use_container_width=True)
+            # Gráfico de barras nativo para os Status
+            st.bar_chart(df_status_count, color="#d32f2f")
 
         with g2:
-            df_tipo_count = df_calc["Tipo"].value_counts().reset_index()
-            df_tipo_count.columns = ["Tipo de Agente", "Qtd"]
+            st.markdown("**Inventário de Equipamentos por Tipo de Carga**")
+            df_tipo_count = df_calc["Tipo"].value_counts()
             
-            fig_bar = px.bar(
-                df_tipo_count, 
-                x="Tipo de Agente", 
-                y="Qtd", 
-                title="Inventário de Equipamentos por Tipo",
-                text="Qtd",
-                color="Tipo de Agente",
-                color_discrete_sequence=px.colors.qualitative.Safe
-            )
-            fig_bar.update_traces(textposition='outside')
-            fig_bar.update_layout(showlegend=False, yaxis_title="Quantidade", xaxis_title="")
-            st.plotly_chart(fig_bar, use_container_width=True)
+            # Gráfico de barras nativo para os Tipos
+            st.bar_chart(df_tipo_count, color="#1f77b4")
 
         st.write("---")
         
