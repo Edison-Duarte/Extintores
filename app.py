@@ -1,6 +1,7 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
+import plotly.express as px # Adicionado para os gráficos
 from datetime import datetime, timedelta
 
 # Configuração da página
@@ -25,7 +26,6 @@ except Exception as e:
     st.error("Erro de conexão com o Google Sheets.")
     st.stop()
 
-# Funções Auxiliares
 def limpar_codigo(df):
     if df is not None and not df.empty and "Nº Ext." in df.columns:
         df["Nº Ext."] = df["Nº Ext."].astype(str).str.strip().apply(lambda x: x[:-2] if x.endswith(".0") else x)
@@ -34,10 +34,9 @@ def limpar_codigo(df):
 df_cadastros = limpar_codigo(df_cadastros)
 df_inspecoes = limpar_codigo(df_inspecoes)
 
-# Abas
 aba_dash, aba_form, aba_hist = st.tabs(["📊 Dashboard Interativo", "📝 Nova Inspeção / Cadastro", "📋 Histórico Geral"])
 
-# --- ABA 1: DASHBOARD INTERATIVO ---
+# --- ABA 1: DASHBOARD COM GRÁFICOS ---
 with aba_dash:
     st.subheader("Painel de Controle")
     if not df_cadastros.empty:
@@ -60,6 +59,23 @@ with aba_dash:
         if cols[3].button(f"Hidro Vencido ❌\n{len(hidro_vencido)}"): st.session_state.filtro = "HidroVencido"
         if cols[4].button(f"Hidro Prox ao Vencimento ⚠️\n{len(hidro_proximo)}"): st.session_state.filtro = "HidroProx"
 
+        # Área dos Gráficos (Segura)
+        try:
+            c_g1, c_g2 = st.columns(2)
+            with c_g1:
+                fig1 = px.pie(df_cadastros, names='Tipo', title="Distribuição por Tipo de Extintor")
+                st.plotly_chart(fig1, use_container_width=True)
+            with c_g2:
+                # Criando um resumo de alertas para o gráfico
+                df_resumo = pd.DataFrame({
+                    'Status': ['Vencidos', 'Prox. Recarga', 'Hidro Vencido', 'Hidro Prox.'],
+                    'Quantidade': [len(vencidos), len(proximos), len(hidro_vencido), len(hidro_proximo)]
+                })
+                fig2 = px.bar(df_resumo, x='Status', y='Quantidade', color='Status', title="Volume de Alertas (30 dias)")
+                st.plotly_chart(fig2, use_container_width=True)
+        except Exception:
+            st.warning("Gráficos indisponíveis no momento.")
+
         filtro = getattr(st.session_state, 'filtro', 'Todos')
         if filtro == "Vencidos": st.dataframe(vencidos, use_container_width=True)
         elif filtro == "Proximos": st.dataframe(proximos, use_container_width=True)
@@ -71,13 +87,11 @@ with aba_dash:
 with aba_form:
     st.subheader("1. Identificação do Equipamento")
     num_extintor = st.text_input("Digite o Nº do Extintor:", key="f_num").strip()
-
     if num_extintor:
         ext_data = df_cadastros[df_cadastros["Nº Ext."] == num_extintor]
         ja_cadastrado = not ext_data.empty
         dados = ext_data.iloc[0] if ja_cadastrado else None
         num_final = str(dados["Nº Ext."]) if ja_cadastrado else num_extintor
-
         if ja_cadastrado:
             st.success(f"✅ Equipamento {num_final} localizado.")
             with st.expander("⚠️ Área de Gerenciamento"):
@@ -85,10 +99,7 @@ with aba_form:
                     df_cadastros = df_cadastros[df_cadastros["Nº Ext."] != num_final]
                     conn.update(worksheet="Cadastros", data=df_cadastros)
                     st.rerun()
-        else:
-            st.warning(f"🆕 Equipamento {num_final} não encontrado.")
-
-        st.subheader("2. Ficha Técnica do Equipamento")
+        else: st.warning(f"🆕 Equipamento {num_final} não encontrado.")
         c1, c2, c3 = st.columns(3)
         with c1:
             loc = st.text_input("Localização Física:", value=str(dados["Localização"]) if ja_cadastrado else "")
@@ -98,7 +109,6 @@ with aba_form:
             p_rec = st.date_input("Vencimento da Recarga:", value=datetime.today())
         with c3:
             p_teste = st.date_input("Vencimento do Teste Hidrostático:", value=datetime.today())
-
         st.write("---")
         st.subheader("3. Checklist de Inspeção Mensal")
         i1, i2, i3 = st.columns(3)
@@ -111,21 +121,18 @@ with aba_form:
             st.info(f"📆 Próxima Pesagem: {p_pesagem.strftime('%d/%m/%Y')}")
         with i3:
             nc = st.text_area("Registro de Anomalias / Não Conformidades:")
-
         if st.button("Gravar Informações e Sincronizar", type="primary"):
             row_cad = {"Nº Ext.": num_final, "Localização": loc, "Tipo": tipo, "Carga (Kg/L)": carga, "Próx. Recarga": str(p_rec), "Próx. Teste": str(p_teste)}
             row_insp = {"Data da Inspeção": str(dt_insp), "Nº Ext.": num_final, "Funcionário": func, "Pesagem": pesagem, "Não Conformidades": nc, "Próx. Pesagem": str(p_pesagem), "Próx. Recarga": str(p_rec), "Próx. Teste": str(p_teste)}
-            
             if ja_cadastrado: df_cadastros.loc[df_cadastros["Nº Ext."] == num_final, row_cad.keys()] = row_cad.values()
             else: df_cadastros = pd.concat([df_cadastros, pd.DataFrame([row_cad])], ignore_index=True)
-            
             df_inspecoes = pd.concat([df_inspecoes, pd.DataFrame([row_insp])], ignore_index=True)
             conn.update(worksheet="Cadastros", data=df_cadastros)
             conn.update(worksheet="Inspecoes", data=df_inspecoes)
             st.success("Salvo com sucesso!")
             st.rerun()
 
-# --- ABA 3: HISTÓRICO COM FILTROS COMPLETOS ---
+# --- ABA 3: HISTÓRICO ---
 with aba_hist:
     st.subheader("📋 Histórico Retroativo de Vistorias")
     f1, f2, f3 = st.columns(3)
@@ -138,18 +145,15 @@ with aba_hist:
     with f3: 
         filtro_nc = st.text_input("⚠️ Busca em Não Conformidades:")
         status_v = st.selectbox("📅 Prazo", ["Todos", "Vencidos", "Próximos (30d)"])
-
     df_view = df_inspecoes.copy()
     if filtro_num: df_view = df_view[df_view["Nº Ext."].astype(str).str.contains(filtro_num, case=False)]
     if filtro_loc: df_view = df_view[df_view["Localização"].isin(filtro_loc)]
     if filtro_tipo: df_view = df_view[df_view["Tipo"].isin(filtro_tipo)]
     if filtro_func != "Todos": df_view = df_view[df_view["Funcionário"] == filtro_func]
     if filtro_nc: df_view = df_view[df_inspecoes["Não Conformidades"].astype(str).str.contains(filtro_nc, case=False)]
-    
     if status_v != "Todos":
         df_view["dt_rec"] = pd.to_datetime(df_view["Próx. Recarga"]).dt.date
         hoje = datetime.today().date()
         if status_v == "Vencidos": df_view = df_view[df_view["dt_rec"] < hoje]
         else: df_view = df_view[(df_view["dt_rec"] >= hoje) & (df_view["dt_rec"] <= hoje + timedelta(30))]
-    
     st.dataframe(df_view.iloc[::-1], use_container_width=True, hide_index=True)
