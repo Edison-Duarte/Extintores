@@ -25,16 +25,17 @@ except Exception as e:
     st.error("Erro de conexão com o Google Sheets.")
     st.stop()
 
-# Funções Auxiliares
-def formatar_para_exibicao(df):
-    """Formata colunas de data para DD/MM/AAAA para exibição nas tabelas"""
+# Função para garantir formato BR nas tabelas (DD/MM/AAAA)
+def formatar_tabelas(df):
     df_copy = df.copy()
-    colunas_data = ['Próx. Recarga', 'Próx. Teste', 'Data da Inspeção', 'Próx. Pesagem']
+    colunas_data = ['Próx. Recarga', 'Próx. Teste', 'Data da Inspeção']
     for col in colunas_data:
         if col in df_copy.columns:
+            # Converte para data e formata como string BR
             df_copy[col] = pd.to_datetime(df_copy[col], errors='coerce').dt.strftime('%d/%m/%Y')
     return df_copy
 
+# Limpeza de código
 def limpar_codigo(df):
     if df is not None and not df.empty and "Nº Ext." in df.columns:
         df["Nº Ext."] = df["Nº Ext."].astype(str).str.strip().apply(lambda x: x[:-2] if x.endswith(".0") else x)
@@ -50,7 +51,7 @@ aba_dash, aba_form, aba_hist = st.tabs(["📊 Dashboard Interativo", "📝 Nova 
 with aba_dash:
     st.subheader("Painel de Controle")
     if not df_cadastros.empty:
-        # Lógica interna (usa datas reais)
+        # Lógica de datas (mantém o formato original para cálculos)
         df_calc = df_cadastros.copy()
         df_calc['dt_rec'] = pd.to_datetime(df_calc['Próx. Recarga']).dt.date
         df_calc['dt_tes'] = pd.to_datetime(df_calc['Próx. Teste']).dt.date
@@ -60,29 +61,20 @@ with aba_dash:
         
         vencidos = df_calc[df_calc['dt_rec'] < hoje]
         proximos = df_calc[(df_calc['dt_rec'] >= hoje) & (df_calc['dt_rec'] <= alerta_30)]
-        hidro_vencido = df_calc[df_calc['dt_tes'] < hoje]
-        hidro_proximo = df_calc[(df_calc['dt_tes'] >= hoje) & (df_calc['dt_tes'] <= alerta_30)]
-
-        cols = st.columns(5)
-        if cols[0].button(f"Total\n{len(df_cadastros)}"): st.session_state.filtro = "Todos"
-        if cols[1].button(f"Vencidos 🔴\n{len(vencidos)}"): st.session_state.filtro = "Vencidos"
-        if cols[2].button(f"Prox. ao Vencimento 🟡\n{len(proximos)}"): st.session_state.filtro = "Proximos"
-        if cols[3].button(f"Hidro Vencido ❌\n{len(hidro_vencido)}"): st.session_state.filtro = "HidroVencido"
-        if cols[4].button(f"Hidro Prox ao Vencimento ⚠️\n{len(hidro_proximo)}"): st.session_state.filtro = "HidroProx"
-
-        # Exibe os dados formatados
-        df_exibir = formatar_para_exibicao(df_cadastros)
-        filtro = getattr(st.session_state, 'filtro', 'Todos')
-        if filtro == "Vencidos": st.dataframe(formatar_para_exibicao(vencidos), use_container_width=True)
-        elif filtro == "Proximos": st.dataframe(formatar_para_exibicao(proximos), use_container_width=True)
-        elif filtro == "HidroVencido": st.dataframe(formatar_para_exibicao(hidro_vencido), use_container_width=True)
-        elif filtro == "HidroProx": st.dataframe(formatar_para_exibicao(hidro_proximo), use_container_width=True)
-        else: st.dataframe(df_exibir, use_container_width=True)
+        
+        cols = st.columns(4)
+        cols[0].metric("Total", len(df_cadastros))
+        cols[1].metric("Vencidos 🔴", len(vencidos))
+        cols[2].metric("30 Dias 🟡", len(proximos))
+        
+        # Exibição formatada
+        st.dataframe(formatar_tabelas(df_cadastros), use_container_width=True)
 
 # --- ABA 2: FORMULÁRIO ---
 with aba_form:
     st.subheader("1. Identificação do Equipamento")
-    num_extintor = st.text_input("Digite o Nº do Extintor:", key="f_num").strip()
+    num_extintor = st.text_input("Digite o Nº do Extintor:").strip()
+    
     if num_extintor:
         ext_data = df_cadastros[df_cadastros["Nº Ext."] == num_extintor]
         ja_cadastrado = not ext_data.empty
@@ -90,26 +82,20 @@ with aba_form:
         
         st.subheader("2. Ficha Técnica")
         c1, c2, c3 = st.columns(3)
-        with c1:
-            loc = st.text_input("Localização:", value=str(dados["Localização"]) if ja_cadastrado else "")
-            tipo = st.selectbox("Tipo:", ["Água", "PQS (Pó Químico)", "CO2", "Espuma Mecânica"], index=0)
-        with c2:
-            p_rec = st.date_input("Vencimento Recarga:")
-            st.caption(f"Visualização: {p_rec.strftime('%d/%m/%Y')}")
-        with c3:
-            p_teste = st.date_input("Vencimento Teste Hidro:")
-            st.caption(f"Visualização: {p_teste.strftime('%d/%m/%Y')}")
+        loc = c1.text_input("Localização:", value=str(dados["Localização"]) if ja_cadastrado else "")
+        p_rec = c2.date_input("Vencimento Recarga:")
+        p_teste = c3.date_input("Vencimento Teste Hidro:")
         
-        # ... (Restante do formulário mantido com a mesma lógica de salvamento)
-        if st.button("Gravar / Atualizar", type="primary"):
-            row_cad = {"Nº Ext.": num_extintor, "Localização": loc, "Tipo": tipo, "Próx. Recarga": str(p_rec), "Próx. Teste": str(p_teste)}
-            if ja_cadastrado: df_cadastros.loc[df_cadastros["Nº Ext."] == num_extintor, row_cad.keys()] = row_cad.values()
-            else: df_cadastros = pd.concat([df_cadastros, pd.DataFrame([row_cad])], ignore_index=True)
+        if st.button("Gravar / Atualizar"):
+            row = {"Nº Ext.": num_extintor, "Localização": loc, "Próx. Recarga": str(p_rec), "Próx. Teste": str(p_teste)}
+            # Atualização no banco
+            if ja_cadastrado: df_cadastros.loc[df_cadastros["Nº Ext."] == num_extintor, row.keys()] = row.values()
+            else: df_cadastros = pd.concat([df_cadastros, pd.DataFrame([row])], ignore_index=True)
             conn.update(worksheet="Cadastros", data=df_cadastros)
-            st.success("Salvo com sucesso!")
+            st.success("Dados salvos!")
             st.rerun()
 
 # --- ABA 3: HISTÓRICO ---
 with aba_hist:
-    st.subheader("📋 Histórico Retroativo")
-    st.dataframe(formatar_para_exibicao(df_inspecoes).iloc[::-1], use_container_width=True, hide_index=True)
+    st.subheader("📋 Histórico Geral")
+    st.dataframe(formatar_tabelas(df_inspecoes).iloc[::-1], use_container_width=True)
