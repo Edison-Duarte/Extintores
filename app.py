@@ -41,7 +41,7 @@ aba_dash, aba_form, aba_hist = st.tabs(["📊 Dashboard Interativo", "📝 Nova 
 with aba_dash:
     st.subheader("Painel de Controle")
     if not df_cadastros.empty:
-        # Lógica de filtros do Dashboard original
+        # Lógica de filtros do Dashboard
         hoje = datetime.today().date()
         alerta_30 = hoje + timedelta(days=30)
         
@@ -54,6 +54,11 @@ with aba_dash:
         hidro_vencido = df_calc[df_calc['dt_tes'] < hoje]
         hidro_proximo = df_calc[(df_calc['dt_tes'] >= hoje) & (df_calc['dt_tes'] <= alerta_30)]
 
+        # --- AQUI ESTÁ A MUDANÇA: Criamos uma exibição sem as colunas indesejadas ---
+        cols_para_remover = ["Pesagem", "Próxima Pesagem", "Não Conformidades"]
+        # Filtramos apenas as colunas que existem no DataFrame para não dar erro
+        colunas_exibicao = [c for c in df_cadastros.columns if c not in cols_para_remover]
+        
         cols = st.columns(5)
         if cols[0].button(f"Total\n{len(df_cadastros)}"): st.session_state.filtro = "Todos"
         if cols[1].button(f"Vencidos 🔴\n{len(vencidos)}"): st.session_state.filtro = "Vencidos"
@@ -62,11 +67,13 @@ with aba_dash:
         if cols[4].button(f"Hidro Prox ao Vencimento ⚠️\n{len(hidro_proximo)}"): st.session_state.filtro = "HidroProx"
 
         filtro = getattr(st.session_state, 'filtro', 'Todos')
-        if filtro == "Vencidos": st.dataframe(vencidos, use_container_width=True)
-        elif filtro == "Proximos": st.dataframe(proximos, use_container_width=True)
-        elif filtro == "HidroVencido": st.dataframe(hidro_vencido, use_container_width=True)
-        elif filtro == "HidroProx": st.dataframe(hidro_proximo, use_container_width=True)
-        else: st.dataframe(df_cadastros, use_container_width=True)
+        
+        # Exibimos o dataframe filtrado (removendo as colunas indesejadas)
+        if filtro == "Vencidos": st.dataframe(vencidos[colunas_exibicao], use_container_width=True)
+        elif filtro == "Proximos": st.dataframe(proximos[colunas_exibicao], use_container_width=True)
+        elif filtro == "HidroVencido": st.dataframe(hidro_vencido[colunas_exibicao], use_container_width=True)
+        elif filtro == "HidroProx": st.dataframe(hidro_proximo[colunas_exibicao], use_container_width=True)
+        else: st.dataframe(df_cadastros[colunas_exibicao], use_container_width=True)
 
 # --- ABA 2: FORMULÁRIO ---
 with aba_form:
