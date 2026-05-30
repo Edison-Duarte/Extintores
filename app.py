@@ -17,12 +17,12 @@ except Exception as e:
     st.error("Erro ao conectar à planilha. Verifique as credenciais.")
     st.stop()
 
-# --- FUNÇÃO CRUCIAL PARA CORRIGIR O ERRO DO 2.0 ---
-# Essa função remove o ".0" se o Pandas tiver convertido para número e garante o formato de texto limpo
+# --- FUNÇÃO DE LIMPEZA E PADRONIZAÇÃO ---
 def limpar_codigo_extintor(df):
     if "Nº Ext." in df.columns:
+        # Remove espaços e garante que seja string
         df["Nº Ext."] = df["Nº Ext."].astype(str).str.strip()
-        # Se terminar com .0 (ex: 2.0), remove o .0
+        # Remove o .0 caso o pandas tenha lido como float descuidado
         df["Nº Ext."] = df["Nº Ext."].apply(lambda x: x[:-2] if x.endswith(".0") else x)
     return df
 
@@ -35,20 +35,37 @@ aba_inserir, aba_historico = st.tabs(["📝 Nova Inspeção / Cadastro", "📊 H
 # --- ABA 1: INSERIR OU ATUALIZAR INSPEÇÃO ---
 with aba_inserir:
     st.subheader("1. Identificação")
-    # O .strip() garante que se o usuário digitar espaços sem querer, o app limpa
     num_extintor = st.text_input("Nº Extintor:", key="num_ext_input").strip()
 
     if num_extintor:
-        extintor_existente = df_cadastros[df_cadastros["Nº Ext."] == num_extintor]
+        # --- LÓGICA DE BUSCA INTELIGENTE (Trata 02, 2, 002 como iguais) ---
+        try:
+            # Tenta converter o número digitado para inteiro (ex: "02" vira 2)
+            num_digitado_int = int(float(num_extintor))
+            
+            # Tenta converter a coluna inteira do banco para comparar numericamente
+            def converter_para_int_seguro(x):
+                try: return int(float(x))
+                except: return -1
+
+            df_cadastros["_busca_int"] = df_cadastros["Nº Ext."].apply(converter_para_int_seguro)
+            extintor_existente = df_cadastros[df_cadastros["_busca_int"] == num_digitado_int]
+        except ValueError:
+            # Caso o código do extintor tenha letras (ex: "EXT-01"), faz a busca por texto exato
+            extintor_existente = df_cadastros[df_cadastros["Nº Ext."] == num_extintor]
+
         ja_cadastrado = not extintor_existente.empty
 
         st.write("---")
         if ja_cadastrado:
             st.success(f"✅ Extintor Nº {num_extintor} localizado! Carregando dados do último registro...")
             dados_finais = extintor_existente.iloc[0]
+            # Atualiza a variável principal com o formato exato que estava no banco para manter consistência
+            num_extintor_salvamento = str(dados_finais["Nº Ext."])
         else:
             st.warning(f"🆕 Extintor Nº {num_extintor} não encontrado. Preencha os campos para realizar o primeiro cadastro.")
             dados_finais = None
+            num_extintor_salvamento = num_extintor
 
         st.subheader("2. Informações do Equipamento")
         
@@ -89,9 +106,12 @@ with aba_inserir:
                 st.error("⚠️ Por favor, preencha o campo 'Funcionário / Responsável' antes de salvar.")
             else:
                 with st.spinner("Salvando dados na planilha..."):
-                    # Forçamos o número do extintor a ser salvo puramente como texto string
+                    # Remove coluna temporária de busca antes de salvar para não sujar a planilha
+                    if "_busca_int" in df_cadastros.columns:
+                        df_cadastros = df_cadastros.drop(columns=["_busca_int"])
+
                     novo_cadastro = {
-                        "Nº Ext.": str(num_extintor),
+                        "Nº Ext.": str(num_extintor_salvamento),
                         "Localização": str(localizacao),
                         "Tipo": str(tipo),
                         "Carga (Kg/L)": str(carga),
@@ -101,7 +121,7 @@ with aba_inserir:
                     
                     nova_inspecao = {
                         "Data da Inspeção": str(data_inspecao),
-                        "Nº Ext.": str(num_extintor),
+                        "Nº Ext.": str(num_extintor_salvamento),
                         "Localização": str(localizacao),
                         "Tipo": str(tipo),
                         "Carga (Kg/L)": str(carga),
@@ -114,7 +134,7 @@ with aba_inserir:
                     }
                     
                     if ja_cadastrado:
-                        df_cadastros.loc[df_cadastros["Nº Ext."] == num_extintor, ["Localização", "Tipo", "Carga (Kg/L)", "Próx. Recarga", "Próx. Teste"]] = [
+                        df_cadastros.loc[df_cadastros["Nº Ext."] == num_extintor_salvamento, ["Localização", "Tipo", "Carga (Kg/L)", "Próx. Recarga", "Próx. Teste"]] = [
                             str(localizacao), str(tipo), str(carga), str(prox_recarga), str(prox_teste)
                         ]
                     else:
@@ -122,14 +142,13 @@ with aba_inserir:
                     
                     df_inspecoes = pd.concat([df_inspecoes, pd.DataFrame([nova_inspecao])], ignore_index=True)
                     
-                    # Força a limpeza novamente antes de enviar para garantir consistência total
                     df_cadastros = limpar_codigo_extintor(df_cadastros)
                     df_inspecoes = limpar_codigo_extintor(df_inspecoes)
                     
                     try:
                         conn.update(worksheet="Cadastros", data=df_cadastros)
                         conn.update(worksheet="Inspecoes", data=df_inspecoes)
-                        st.success(f"Dados do Extintor {num_extintor} salvos com sucesso!")
+                        st.success(f"Dados do Extintor {num_extintor_salvamento} salvos com sucesso!")
                         st.rerun()
                     except Exception as e:
                         st.error(f"Erro ao gravar os dados na planilha: {e}")
@@ -141,12 +160,22 @@ with aba_historico:
     if df_inspecoes.empty:
         st.info("Nenhuma inspeção foi registrada ainda.")
     else:
-        filtro_extintor = st.text_input("Filtrar histórico por Nº do Extintor (Deixe em branco para ver todos):", value="").strip()
+        filtro_extintor = st.text_input("Filtrar histórico por Nº do Extintor (Deixe em branco para ver todos):", value="", key="filtro_hist").strip()
         
         df_exibicao = df_inspecoes.copy()
         
         if filtro_extintor:
-            df_exibicao = df_exibicao[df_exibicao["Nº Ext."] == filtro_extintor]
+            # Filtro inteligente no histórico também
+            try:
+                filtro_int = int(float(filtro_extintor))
+                def converter_para_int_seguro(x):
+                    try: return int(float(x))
+                    except: return -1
+                df_exibicao["_filtro_int"] = df_exibicao["Nº Ext."].apply(converter_para_int_seguro)
+                df_exibicao = df_exibicao[df_exibicao["_filtro_int"] == filtro_int]
+                df_exibicao = df_exibicao.drop(columns=["_filtro_int"])
+            except ValueError:
+                df_exibicao = df_exibicao[df_exibicao["Nº Ext."] == filtro_extintor]
             
         if df_exibicao.empty:
             st.warning(f"Nenhum registro encontrado para o extintor Nº {filtro_extintor}.")
@@ -158,5 +187,4 @@ with aba_historico:
                 except:
                     pass
             
-            # Formata a exibição da tabela na tela de forma limpa
             st.dataframe(df_exibicao, use_container_width=True, hide_index=True)
