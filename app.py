@@ -40,9 +40,31 @@ aba_dash, aba_form, aba_hist = st.tabs(["📊 Dashboard Interativo", "📝 Nova 
 # --- ABA 1: DASHBOARD ---
 with aba_dash:
     st.subheader("Painel de Controle")
-    if not df_cadastros.empty:
-        # Lógica de exibição simples baseada no cadastro
-        st.dataframe(df_cadastros, use_container_width=True)
+    if not df_cadastros.empty and not df_inspecoes.empty:
+        # 1. Pega apenas a última inspeção de cada extintor
+        df_ultima_insp = df_inspecoes.sort_values("Data da Inspeção").groupby("Nº Ext.").tail(1)
+        
+        # 2. Mescla o cadastro com os dados da última inspeção
+        df_dashboard = df_cadastros.merge(
+            df_ultima_insp[["Nº Ext.", "Próx. Recarga", "Próx. Teste", "Localização", "Tipo", "Carga (Kg/L)"]], 
+            on="Nº Ext.", 
+            how="left", 
+            suffixes=("", "_insp")
+        )
+        
+        # 3. Prioriza os dados da inspeção (se existirem), caso contrário mantém o cadastro
+        df_dashboard["Próx. Recarga"] = df_dashboard["Próx. Recarga_insp"].fillna(df_dashboard["Próx. Recarga"])
+        df_dashboard["Próx. Teste"] = df_dashboard["Próx. Teste_insp"].fillna(df_dashboard["Próx. Teste"])
+        df_dashboard["Localização"] = df_dashboard["Localização_insp"].fillna(df_dashboard["Localização"])
+        df_dashboard["Tipo"] = df_dashboard["Tipo_insp"].fillna(df_dashboard["Tipo"])
+        df_dashboard["Carga (Kg/L)"] = df_dashboard["Carga (Kg/L)_insp"].fillna(df_dashboard["Carga (Kg/L)"])
+        
+        # Remove colunas auxiliares
+        cols_to_drop = [c for c in df_dashboard.columns if '_insp' in c]
+        df_dashboard = df_dashboard.drop(columns=cols_to_drop)
+
+        # Exibe o dashboard atualizado
+        st.dataframe(df_dashboard, use_container_width=True)
 
 # --- ABA 2: FORMULÁRIO ---
 with aba_form:
