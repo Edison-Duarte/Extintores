@@ -26,9 +26,6 @@ except Exception as e:
     st.stop()
 
 # Funções Auxiliares
-def formatar_data_br(data):
-    return data.strftime('%d/%m/%Y') if isinstance(data, datetime) else data
-
 def limpar_codigo(df):
     if df is not None and not df.empty and "Nº Ext." in df.columns:
         df["Nº Ext."] = df["Nº Ext."].astype(str).str.strip().apply(lambda x: x[:-2] if x.endswith(".0") else x)
@@ -37,6 +34,11 @@ def limpar_codigo(df):
 df_cadastros = limpar_codigo(df_cadastros)
 df_inspecoes = limpar_codigo(df_inspecoes)
 
+# Garantir formato de data nas colunas para exibição correta
+for col in ['Próx. Recarga', 'Próx. Teste']:
+    if col in df_cadastros.columns:
+        df_cadastros[col] = pd.to_datetime(df_cadastros[col]).dt.strftime('%d/%m/%Y')
+
 # Abas
 aba_dash, aba_form, aba_hist = st.tabs(["📊 Dashboard Interativo", "📝 Nova Inspeção / Cadastro", "📋 Histórico Geral"])
 
@@ -44,12 +46,13 @@ aba_dash, aba_form, aba_hist = st.tabs(["📊 Dashboard Interativo", "📝 Nova 
 with aba_dash:
     st.subheader("Painel de Controle")
     if not df_cadastros.empty:
+        # Convertemos de volta para comparar datas internamente
+        df_calc = df_cadastros.copy()
+        df_calc['dt_rec'] = pd.to_datetime(df_calc['Próx. Recarga'], format='%d/%m/%Y').dt.date
+        df_calc['dt_tes'] = pd.to_datetime(df_calc['Próx. Teste'], format='%d/%m/%Y').dt.date
+        
         hoje = datetime.today().date()
         alerta_30 = hoje + timedelta(days=30)
-        
-        df_calc = df_cadastros.copy()
-        df_calc['dt_rec'] = pd.to_datetime(df_calc['Próx. Recarga']).dt.date
-        df_calc['dt_tes'] = pd.to_datetime(df_calc['Próx. Teste']).dt.date
 
         vencidos = df_calc[df_calc['dt_rec'] < hoje]
         proximos = df_calc[(df_calc['dt_rec'] >= hoje) & (df_calc['dt_rec'] <= alerta_30)]
@@ -70,64 +73,35 @@ with aba_dash:
         elif filtro == "HidroProx": st.dataframe(hidro_proximo, use_container_width=True)
         else: st.dataframe(df_cadastros, use_container_width=True)
 
-# --- ABA 2: FORMULÁRIO (Datas em formato BR) ---
+# --- ABA 2: FORMULÁRIO ---
 with aba_form:
     st.subheader("1. Identificação do Equipamento")
     num_extintor = st.text_input("Digite o Nº do Extintor:", key="f_num").strip()
-
     if num_extintor:
         ext_data = df_cadastros[df_cadastros["Nº Ext."] == num_extintor]
         ja_cadastrado = not ext_data.empty
         dados = ext_data.iloc[0] if ja_cadastrado else None
         num_final = str(dados["Nº Ext."]) if ja_cadastrado else num_extintor
 
-        if ja_cadastrado:
-            st.success(f"✅ Equipamento {num_final} localizado.")
-        else:
-            st.warning(f"🆕 Equipamento {num_final} não encontrado.")
-
-        st.subheader("2. Ficha Técnica")
         c1, c2, c3 = st.columns(3)
         with c1:
             loc = st.text_input("Localização Física:", value=str(dados["Localização"]) if ja_cadastrado else "")
             tipo = st.selectbox("Tipo de Carga:", ["Água", "PQS (Pó Químico)", "CO2", "Espuma Mecânica"], index=0)
         with c2:
-            carga = st.text_input("Capacidade de Carga (Kg/L):", value=str(dados["Carga (Kg/L)"]) if ja_cadastrado else "")
-            # O date_input sempre mostra o calendário em formato do sistema, mas exibiremos abaixo o texto formatado
             p_rec = st.date_input("Vencimento da Recarga:")
-            st.caption(f"Data selecionada: {formatar_data_br(p_rec)}")
         with c3:
             p_teste = st.date_input("Vencimento do Teste Hidrostático:")
-            st.caption(f"Data selecionada: {formatar_data_br(p_teste)}")
 
-        st.write("---")
-        st.subheader("3. Checklist de Inspeção Mensal")
-        i1, i2, i3 = st.columns(3)
-        with i1:
-            dt_insp = st.date_input("Data da Inspeção:")
-            st.caption(f"Data selecionada: {formatar_data_br(dt_insp)}")
-            func = st.text_input("Inspetor / Responsável Técnico:")
-        with i2:
-            pesagem = st.number_input("Massa / Pesagem Atual (Kg):", min_value=0.0, step=0.01)
-            p_pesagem = dt_insp + timedelta(days=90)
-            st.info(f"📆 Próxima Pesagem: {formatar_data_br(p_pesagem)}")
-        with i3:
-            nc = st.text_area("Registro de Anomalias / Não Conformidades:")
-
-        if st.button("Gravar Informações", type="primary"):
-            row_cad = {"Nº Ext.": num_final, "Localização": loc, "Tipo": tipo, "Carga (Kg/L)": carga, "Próx. Recarga": str(p_rec), "Próx. Teste": str(p_teste)}
-            row_insp = {"Data da Inspeção": str(dt_insp), "Nº Ext.": num_final, "Funcionário": func, "Pesagem": pesagem, "Não Conformidades": nc, "Próx. Pesagem": str(p_pesagem), "Próx. Recarga": str(p_rec), "Próx. Teste": str(p_teste)}
-            
-            if ja_cadastrado: df_cadastros.loc[df_cadastros["Nº Ext."] == num_final, row_cad.keys()] = row_cad.values()
-            else: df_cadastros = pd.concat([df_cadastros, pd.DataFrame([row_cad])], ignore_index=True)
-            
-            df_inspecoes = pd.concat([df_inspecoes, pd.DataFrame([row_insp])], ignore_index=True)
+        if st.button("Gravar / Atualizar"):
+            # Salvando como string no formato BR para o Sheets
+            row = {"Nº Ext.": num_final, "Localização": loc, "Tipo": tipo, "Próx. Recarga": p_rec.strftime('%d/%m/%Y'), "Próx. Teste": p_teste.strftime('%d/%m/%Y')}
+            if ja_cadastrado: df_cadastros.loc[df_cadastros["Nº Ext."] == num_final, row.keys()] = row.values()
+            else: df_cadastros = pd.concat([df_cadastros, pd.DataFrame([row])], ignore_index=True)
             conn.update(worksheet="Cadastros", data=df_cadastros)
-            conn.update(worksheet="Inspecoes", data=df_inspecoes)
             st.success("Salvo com sucesso!")
             st.rerun()
 
 # --- ABA 3: HISTÓRICO ---
 with aba_hist:
-    st.subheader("📋 Histórico Retroativo")
-    st.dataframe(df_inspecoes.iloc[::-1], use_container_width=True, hide_index=True)
+    st.subheader("📋 Histórico Geral")
+    st.dataframe(df_inspecoes, use_container_width=True)
