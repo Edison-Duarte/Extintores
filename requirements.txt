@@ -2,3 +2,5 @@ streamlit
 streamlit-gsheets
 pandas
 plotly
+markdown-it-py==2.2.0
+mdurl==0.1.2
