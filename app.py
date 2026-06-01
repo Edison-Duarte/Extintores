@@ -122,8 +122,12 @@ with aba_form:
             row_cad = {"Nº Ext.": num_final, "Localização": loc, "Tipo": tipo, "Carga (Kg/L)": carga, "Próx. Recarga": str(p_rec), "Próx. Teste": str(p_teste)}
             row_insp = {"Data da Inspeção": str(dt_insp), "Nº Ext.": num_final, "Localização": loc, "Tipo": tipo, "Carga (Kg/L)": carga, "Funcionário": func, "Pesagem": pesagem, "Não Conformidades": nc, "Próx. Pesagem": str(p_pesagem), "Próx. Recarga": str(p_rec), "Próx. Teste": str(p_teste)}
             
-            if ja_cadastrado: df_cadastros.loc[df_cadastros["Nº Ext."] == num_final, row_cad.keys()] = row_cad.values()
-            else: df_cadastros = pd.concat([df_cadastros, pd.DataFrame([row_cad])], ignore_index=True)
+            if ja_cadastrado:
+                # Ajuste cirúrgico para evitar o erro de atribuição do Pandas preservando tipos
+                for chave, valor in row_cad.items():
+                    df_cadastros.loc[df_cadastros["Nº Ext."] == num_final, chave] = valor
+            else:
+                df_cadastros = pd.concat([df_cadastros, pd.DataFrame([row_cad])], ignore_index=True)
             
             df_inspecoes = pd.concat([df_inspecoes, pd.DataFrame([row_insp])], ignore_index=True)
             conn.update(worksheet="Cadastros", data=df_cadastros)
@@ -212,20 +216,3 @@ with aba_hist:
     colunas_finais = [c for c in colunas_historico if c in df_view.columns]
     
     st.dataframe(df_view[colunas_finais].iloc[::-1], use_container_width=True, hide_index=True)
-
-# --- ASSINATURA FINALIZADA COM FONTE GABRIOLA ---
-st.markdown("---")
-
-st.markdown(
-    """
-    <div style='text-align: center; margin-top: 100px;'>
-        <p style='margin-bottom: -8px; font-family: "Gabriola", serif; font-style: italic; font-size: 18px; color: #0056b3;'>
-            Developed by:
-        </p>
-        <p style='font-family: "Gabriola", serif; font-size: 20px; font-weight: 100; color: #1e7044;'>
-            Edison Duarte Filho®
-        </p>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
