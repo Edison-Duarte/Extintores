@@ -121,7 +121,9 @@ with aba_form:
             df_inspecoes = pd.concat([df_inspecoes, pd.DataFrame([row_insp])], ignore_index=True)
             conn.update(worksheet="Cadastros", data=df_cadastros)
             conn.update(worksheet="Inspecoes", data=df_inspecoes)
-            st.success("Salvo com sucesso!")
+            
+            # ADIÇÃO DA MENSAGEM DE SUCESSO AO GRAVAR
+            st.success("🎉 Inspeção gravada com sucesso! Dados sincronizados.")
             st.rerun()
 
 # --- ABA 3: HISTÓRICO ---
@@ -161,12 +163,30 @@ with aba_hist:
         df_view = df_view[df_view["Funcionário"] == busca_insp]
         
     hoje_filtrar = datetime.today().date()
+    alerta_30_filtrar = hoje_filtrar + timedelta(days=30)
+    
     if busca_prazo == "Vencidos (Recarga)":
         df_view = df_view[pd.to_datetime(df_view["Próx. Recarga"]).dt.date < hoje_filtrar]
     elif busca_prazo == "Vencidos (Teste)":
         df_view = df_view[pd.to_datetime(df_view["Próx. Teste"]).dt.date < hoje_filtrar]
 
-    # COLUNAS EXIBIDAS NO HISTÓRICO (Incluído de volta apenas o campo 'Não Conformidades')
+    # ADIÇÃO VISUAL DAS BOLINHAS DE ALERTAS DE PRAZO NA TABELA DO HISTÓRICO
+    if not df_view.empty and "Próx. Recarga" in df_view.columns:
+        def aplicar_status_prazo(data_str):
+            try:
+                dt = pd.to_datetime(data_str).date()
+                if dt < hoje_filtrar:
+                    return f"🔴 {data_str}"
+                elif hoje_filtrar <= dt <= alerta_30_filtrar:
+                    return f"🟡 {data_str}"
+                else:
+                    return f"🟢 {data_str}"
+            except:
+                return data_str
+        
+        df_view["Próx. Recarga"] = df_view["Próx. Recarga"].apply(aplicar_status_prazo)
+
+    # COLUNAS EXIBIDAS NO HISTÓRICO (Mantendo o campo 'Não Conformidades')
     colunas_historico = ["Data da Inspeção", "Nº Ext.", "Não Conformidades", "Funcionário", "Localização", "Tipo", "Carga (Kg/L)", "Próx. Recarga", "Próx. Teste"]
     colunas_finais = [c for c in colunas_historico if c in df_view.columns]
     
