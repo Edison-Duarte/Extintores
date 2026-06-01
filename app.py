@@ -81,7 +81,13 @@ with aba_form:
         dados = ext_data.iloc[0] if ja_cadastrado else None
         num_final = str(dados["Nº Ext."]) if ja_cadastrado else num_extintor
 
-        st.subheader("2. Ficha Técnica do Equipamento")
+        # RETORNO DAS MENSAGENS EXATAS DE VALIDAÇÃO
+        if ja_cadastrado:
+            st.success(f"✅ Extintor nº {num_final} localizado! Carregando dados do último registro.")
+        else:
+            st.warning(f"🆕 Equipamento {num_final} não encontrado.")
+
+        st.subheader("2. Ficha Técnico do Equipamento")
         c1, c2, c3 = st.columns(3)
         with c1:
             loc = st.text_input("Localização Física:", value=str(dados["Localização"]) if ja_cadastrado else "")
@@ -122,7 +128,6 @@ with aba_form:
 with aba_hist:
     st.subheader("📋 Histórico Retroativo de Vistorias")
     
-    # --- FILTROS COMPLETOS RESTAURADOS ---
     col1, col2, col3 = st.columns(3)
     busca_id = col1.text_input("🔍 Busca por Nº Extintor:")
     
@@ -140,7 +145,6 @@ with aba_hist:
     
     busca_prazo = col6.selectbox("📅 Prazo", ["Todos", "Vencidos (Recarga)", "Vencidos (Teste)"])
 
-    # Aplicação dos Filtros no DataFrame de Visualização
     df_view = df_inspecoes.copy()
     
     if busca_id:
@@ -165,20 +169,3 @@ with aba_hist:
     colunas_finais = [c for c in colunas_historico if c in df_view.columns]
     
     st.dataframe(df_view[colunas_finais].iloc[::-1], use_container_width=True, hide_index=True)
-
-# --- ASSINATURA FINALIZADA COM FONTE GABRIOLA ---
-st.markdown("---")
-
-st.markdown(
-    """
-    <div style='text-align: center; margin-top: 100px;'>
-        <p style='margin-bottom: -8px; font-family: "Gabriola", serif; font-style: italic; font-size: 18px; color: #0056b3;'>
-            Developed by:
-        </p>
-        <p style='font-family: "Gabriola", serif; font-size: 20px; font-weight: 100; color: #1e7044;'>
-            Edison Duarte Filho®
-        </p>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
