@@ -123,9 +123,10 @@ with aba_form:
             row_insp = {"Data da Inspeção": str(dt_insp), "Nº Ext.": num_final, "Localização": loc, "Tipo": tipo, "Carga (Kg/L)": carga, "Funcionário": func, "Pesagem": pesagem, "Não Conformidades": nc, "Próx. Pesagem": str(p_pesagem), "Próx. Recarga": str(p_rec), "Próx. Teste": str(p_teste)}
             
             if ja_cadastrado:
-                # Ajuste cirúrgico para evitar o erro de atribuição do Pandas preservando tipos
+                # Localiza a posição indexada exata da linha para reescrever de forma segura isolando do tipo do DataFrame
+                index_ext = df_cadastros[df_cadastros["Nº Ext."] == num_final].index[0]
                 for chave, valor in row_cad.items():
-                    df_cadastros.loc[df_cadastros["Nº Ext."] == num_final, chave] = valor
+                    df_cadastros.at[index_ext, chave] = valor
             else:
                 df_cadastros = pd.concat([df_cadastros, pd.DataFrame([row_cad])], ignore_index=True)
             
