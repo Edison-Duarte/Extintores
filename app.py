@@ -182,27 +182,30 @@ with aba_hist:
     elif busca_prazo == "Vencidos (Teste)":
         df_view = df_view[pd.to_datetime(df_view["Próx. Teste"]).dt.date < hoje_filtrar]
 
-    # ADIÇÃO VISUAL DAS BOLINHAS DE ALERTAS DE PRAZO NA TABELA DO HISTÓRICO COM PADRÃO BRASILEIRO
-    if not df_view.empty and "Próx. Recarga" in df_view.columns:
-        def aplicar_status_prazo(data_str):
-            try:
-                dt = pd.to_datetime(data_str).date()
-                data_br = dt.strftime('%d/%m/%Y')
-                if dt < hoje_filtrar:
-                    return f"🔴 {data_br}"
-                elif hoje_filtrar <= dt <= alerta_30_filtrar:
-                    return f"🟡 {data_br}"
-                else:
-                    return f"🟢 {data_br}"
-            except:
-                return data_str
-        
-        df_view["Próx. Recarga"] = df_view["Próx. Recarga"].apply(aplicar_status_prazo)
+    # FUNÇÃO PARA ADICIONAR AS BOLINHAS DE ALERTA NO PADRÃO BRASILEIRO
+    def aplicar_status_prazo(data_str):
+        try:
+            dt = pd.to_datetime(data_str).date()
+            data_br = dt.strftime('%d/%m/%Y')
+            if dt < hoje_filtrar:
+                return f"🔴 {data_br}"
+            elif hoje_filtrar <= dt <= alerta_30_filtrar:
+                return f"🟡 {data_br}"
+            else:
+                return f"🟢 {data_br}"
+        except:
+            return data_str
+
+    # APLICAÇÃO DOS FARÓIS NAS DUAS COLUNAS DE PRAZOS DO HISTÓRICO
+    if not df_view.empty:
+        if "Próx. Recarga" in df_view.columns:
+            df_view["Próx. Recarga"] = df_view["Próx. Recarga"].apply(aplicar_status_prazo)
+        if "Próx. Teste" in df_view.columns:
+            df_view["Próx. Teste"] = df_view["Próx. Teste"].apply(aplicar_status_prazo)
 
     # AJUSTE DE DATA PARA O PADRÃO BRASILEIRO NAS OUTRAS COLUNAS DO HISTÓRICO
-    for col_data in ["Data da Inspeção", "Próx. Teste"]:
-        if col_data in df_view.columns:
-            df_view[col_data] = pd.to_datetime(df_view[col_data]).dt.strftime('%d/%m/%Y')
+    if "Data da Inspeção" in df_view.columns:
+        df_view["Data da Inspeção"] = pd.to_datetime(df_view["Data da Inspeção"]).dt.strftime('%d/%m/%Y')
 
     # COLUNAS EXIBIDAS NO HISTÓRICO (Mantendo o campo 'Não Conformidades')
     colunas_historico = ["Data da Inspeção", "Nº Ext.", "Não Conformidades", "Funcionário", "Localização", "Tipo", "Carga (Kg/L)", "Próx. Recarga", "Próx. Teste"]
