@@ -87,7 +87,7 @@ with aba_form:
         else:
             st.warning(f"🆕 Equipamento {num_final} não encontrado.")
 
-        st.subheader("2. Ficha Técnico do Equipamento")
+        st.subheader("2. Ficha Técnica do Equipamento")
         c1, c2, c3 = st.columns(3)
         with c1:
             loc = st.text_input("Localização Física:", value=str(dados["Localização"]) if ja_cadastrado else "")
@@ -128,6 +128,7 @@ with aba_form:
 with aba_hist:
     st.subheader("📋 Histórico Retroativo de Vistorias")
     
+    # --- FILTROS COMPLETOS RESTAURADOS ---
     col1, col2, col3 = st.columns(3)
     busca_id = col1.text_input("🔍 Busca por Nº Extintor:")
     
@@ -145,6 +146,7 @@ with aba_hist:
     
     busca_prazo = col6.selectbox("📅 Prazo", ["Todos", "Vencidos (Recarga)", "Vencidos (Teste)"])
 
+    # Aplicação dos Filtros no DataFrame de Visualização
     df_view = df_inspecoes.copy()
     
     if busca_id:
@@ -164,8 +166,8 @@ with aba_hist:
     elif busca_prazo == "Vencidos (Teste)":
         df_view = df_view[pd.to_datetime(df_view["Próx. Teste"]).dt.date < hoje_filtrar]
 
-    # COLUNAS EXIBIDAS NO HISTÓRICO (Sem Pesagem, Próx. Pesagem e Não Conformidades)
-    colunas_historico = ["Data da Inspeção", "Nº Ext.", "Funcionário", "Localização", "Tipo", "Carga (Kg/L)", "Próx. Recarga", "Próx. Teste"]
+    # COLUNAS EXIBIDAS NO HISTÓRICO (Incluído de volta apenas o campo 'Não Conformidades')
+    colunas_historico = ["Data da Inspeção", "Nº Ext.", "Não Conformidades", "Funcionário", "Localização", "Tipo", "Carga (Kg/L)", "Próx. Recarga", "Próx. Teste"]
     colunas_finais = [c for c in colunas_historico if c in df_view.columns]
     
     st.dataframe(df_view[colunas_finais].iloc[::-1], use_container_width=True, hide_index=True)
