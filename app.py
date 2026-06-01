@@ -129,9 +129,14 @@ with aba_form:
             conn.update(worksheet="Cadastros", data=df_cadastros)
             conn.update(worksheet="Inspecoes", data=df_inspecoes)
             
-            # ADIÇÃO DA MENSAGEM DE SUCESSO AO GRAVAR
-            st.success("🎉 Inspeção gravada com sucesso! Dados sincronizados.")
+            # DEFINIÇÃO DA MENSAGEM NA SESSÃO PARA APARECER APÓS O RERUN
+            st.session_state.mensagem_sucesso = "🎉 Inspeção gravada com sucesso! Dados sincronizados."
             st.rerun()
+
+        # EXIBE A MENSAGEM NA TELA SE ELA EXISTIR NA SESSÃO
+        if "mensagem_sucesso" in st.session_state:
+            st.success(st.session_state.mensagem_sucesso)
+            del st.session_state.mensagem_sucesso
 
 # --- ABA 3: HISTÓRICO ---
 with aba_hist:
