@@ -176,18 +176,4 @@ with aba_hist:
             try:
                 dt = pd.to_datetime(data_str).date()
                 if dt < hoje_filtrar:
-                    return f"🔴 {data_str}"
-                elif hoje_filtrar <= dt <= alerta_30_filtrar:
-                    return f"🟡 {data_str}"
-                else:
-                    return f"🟢 {data_str}"
-            except:
-                return data_str
-        
-        df_view["Próx. Recarga"] = df_view["Próx. Recarga"].apply(aplicar_status_prazo)
-
-    # COLUNAS EXIBIDAS NO HISTÓRICO (Mantendo o campo 'Não Conformidades')
-    colunas_historico = ["Data da Inspeção", "Nº Ext.", "Não Conformidades", "Funcionário", "Localização", "Tipo", "Carga (Kg/L)", "Próx. Recarga", "Próx. Teste"]
-    colunas_finais = [c for c in colunas_historico if c in df_view.columns]
-    
-    st.dataframe(df_view[colunas_finais].iloc[::-1], use_container_width=True, hide_index=True)
+                    return f"🔴 {data_
