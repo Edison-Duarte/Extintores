@@ -210,6 +210,10 @@ with aba_hist:
     elif busca_prazo == "Próximos ao Vencimento (Teste)":
         df_view = df_view[(pd.to_datetime(df_view["Próx. Teste"]).dt.date >= hoje_filtrar) & (pd.to_datetime(df_view["Próx. Teste"]).dt.date <= alerta_30_filtrar)]
 
+    # REMOVE DUPLICIDADES: Mantém estritamente o último registro feito para cada extintor único
+    if not df_view.empty:
+        df_view = df_view.drop_duplicates(subset=["Nº Ext."], keep="last")
+
     # FUNÇÃO PARA ADICIONAR AS BOLINHAS DE ALERTA NO PADRÃO BRASILEIRO
     def aplicar_status_prazo(data_str):
         try:
