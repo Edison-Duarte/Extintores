@@ -88,22 +88,39 @@ with aba_form:
         dados = ext_data.iloc[0] if ja_cadastrado else None
         num_final = str(dados["Nº Ext."]) if ja_cadastrado else num_extintor
 
-        # RETORNO DAS MENSAGENS EXATAS DE VALIDAÇÃO
+        modo_edicao = False
         if ja_cadastrado:
             st.success(f"✅ Extintor nº {num_final} localizado! Carregando dados do último registro.")
+            # Opção explícita para habilitar a edição do cadastro existente
+            modo_edicao = st.toggle("✏️ Ativar Modo de Edição de Cadastro (Permitir alterar a Ficha Técnica)", value=False)
         else:
-            st.warning(f"🆕 Equipamento {num_final} não encontrado.")
+            st.warning(f"🆕 Equipamento {num_final} não encontrado. Preencha os campos abaixo para cadastrá-lo.")
 
         st.subheader("2. Ficha Técnica do Equipamento")
         c1, c2, c3 = st.columns(3)
+        
+        # Define se os campos da Ficha Técnica ficam desabilitados (Modo Leitura) ou liberados
+        campos_bloqueados = ja_cadastrado and not modo_edicao
+
         with c1:
-            loc = st.text_input("Localização Física:", value=str(dados["Localização"]) if ja_cadastrado else "")
-            tipo = st.selectbox("Tipo de Carga:", ["Água", "PQS (Pó Químico)", "CO2", "Espuma Mecânica"], index=0)
+            loc = st.text_input("Localização Física:", value=str(dados["Localização"]) if ja_cadastrado else "", disabled=campos_bloqueados)
+            lista_tipos = ["Água", "PQS (Pó Químico)", "CO2", "Espuma Mecânica"]
+            idx_tipo = lista_tipos.index(dados["Tipo"]) if (ja_cadastrado and dados["Tipo"] in lista_tipos) else 0
+            tipo = st.selectbox("Tipo de Carga:", lista_tipos, index=idx_tipo, disabled=campos_bloqueados)
         with c2:
-            carga = st.text_input("Capacidade de Carga (Kg/L):", value=str(dados["Carga (Kg/L)"]) if ja_cadastrado else "")
-            p_rec = st.date_input("Vencimento da Recarga:", value=datetime.today())
+            carga = st.text_input("Capacidade de Carga (Kg/L):", value=str(dados["Carga (Kg/L)"]) if ja_cadastrado else "", disabled=campos_bloqueados)
+            
+            val_rec = datetime.today()
+            if ja_cadastrado:
+                try: val_rec = pd.to_datetime(dados["Próx. Recarga"]).date()
+                except: pass
+            p_rec = st.date_input("Vencimento da Recarga:", value=val_rec, disabled=campos_bloqueados)
         with c3:
-            p_teste = st.date_input("Vencimento do Teste Hidrostático:", value=datetime.today())
+            val_tes = datetime.today()
+            if ja_cadastrado:
+                try: val_tes = pd.to_datetime(dados["Próx. Teste"]).date()
+                except: pass
+            p_teste = st.date_input("Vencimento do Teste Hidrostático:", value=val_tes, disabled=campos_bloqueados)
 
         st.write("---")
         st.subheader("3. Checklist de Inspeção Mensal")
@@ -123,10 +140,11 @@ with aba_form:
             row_insp = {"Data da Inspeção": str(dt_insp), "Nº Ext.": num_final, "Localização": loc, "Tipo": tipo, "Carga (Kg/L)": carga, "Funcionário": func, "Pesagem": pesagem, "Não Conformidades": nc, "Próx. Pesagem": str(p_pesagem), "Próx. Recarga": str(p_rec), "Próx. Teste": str(p_teste)}
             
             if ja_cadastrado:
-                # Localiza a posição indexada exata da linha para reescrever de forma segura isolando do tipo do DataFrame
-                index_ext = df_cadastros[df_cadastros["Nº Ext."] == num_final].index[0]
-                for chave, valor in row_cad.items():
-                    df_cadastros.at[index_ext, chave] = valor
+                if modo_edicao:
+                    # Se o modo edição está ativo, removemos a linha antiga e adicionamos a atualizada para evitar erros de tipo do Pandas
+                    df_cadastros = df_cadastros[df_cadastros["Nº Ext."] != num_final]
+                    df_cadastros = pd.concat([df_cadastros, pd.DataFrame([row_cad])], ignore_index=True)
+                # Se o modo edição estava desligado, mantém o cadastro intacto (apenas registra a nova inspeção)
             else:
                 df_cadastros = pd.concat([df_cadastros, pd.DataFrame([row_cad])], ignore_index=True)
             
@@ -135,7 +153,7 @@ with aba_form:
             conn.update(worksheet="Inspecoes", data=df_inspecoes)
             
             # DEFINIÇÃO DA MENSAGEM NA SESSÃO PARA APARECER APÓS O RERUN
-            st.session_state.mensagem_sucesso = "🎉 Inspeção gravada com sucesso! Dados sincronizados."
+            st.session_state.mensagem_sucesso = "🎉 Informações gravadas com sucesso! Dados sincronizados."
             st.rerun()
 
         # EXIBE A MENSAGEM NA TELA SE ELA EXISTIR NA SESSÃO
