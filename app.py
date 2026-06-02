@@ -91,6 +91,7 @@ with aba_form:
         modo_edicao = False
         if ja_cadastrado:
             st.success(f"✅ Extintor nº {num_final} localizado! Carregando dados do último registro.")
+            # Opção explícita para habilitar a edição do cadastro existente
             modo_edicao = st.toggle("✏️ Ativar Modo de Edição de Cadastro (Permitir alterar a Ficha Técnica)", value=False)
         else:
             st.warning(f"🆕 Equipamento {num_final} não encontrado. Preencha os campos abaixo para cadastrá-lo.")
@@ -98,6 +99,7 @@ with aba_form:
         st.subheader("2. Ficha Técnica do Equipamento")
         c1, c2, c3 = st.columns(3)
         
+        # Define se os campos da Ficha Técnica ficam desabilitados (Modo Leitura) ou liberados
         campos_bloqueados = ja_cadastrado and not modo_edicao
 
         with c1:
@@ -125,8 +127,7 @@ with aba_form:
         i1, i2, i3 = st.columns(3)
         with i1:
             dt_insp = st.date_input("Data da Inspeção:", value=datetime.today())
-            # Adicionado asterisco (*) visual indicando campo obrigatório
-            func = st.text_input("Inspetor / Responsável Técnico: *").strip()
+            func = st.text_input("Inspetor / Responsável Técnico:")
         with i2:
             pesagem = st.number_input("Massa / Pesagem Atual (Kg):", min_value=0.0, step=0.01)
             p_pesagem = dt_insp + timedelta(days=90)
@@ -135,26 +136,25 @@ with aba_form:
             nc = st.text_area("Registro de Anomalias / Não Conformidades:")
 
         if st.button("Gravar Informações e Sincronizar", type="primary"):
-            # Validação de Obrigatoriedade: Se o nome estiver vazio, interrompe o processo e avisa o usuário
-            if not func:
-                st.warning("⚠️ O preenchimento do campo **Inspetor / Responsável Técnico** é obrigatório para salvar a inspeção.")
-            else:
-                row_cad = {"Nº Ext.": num_final, "Localização": loc, "Tipo": tipo, "Carga (Kg/L)": carga, "Próx. Recarga": str(p_rec), "Próx. Teste": str(p_teste)}
-                row_insp = {"Data da Inspeção": str(dt_insp), "Nº Ext.": num_final, "Localização": loc, "Tipo": tipo, "Carga (Kg/L)": carga, "Funcionário": func, "Pesagem": pesagem, "Não Conformidades": nc, "Próx. Pesagem": str(p_pesagem), "Próx. Recarga": str(p_rec), "Próx. Teste": str(p_teste)}
-                
-                if ja_cadastrado:
-                    if modo_edicao:
-                        df_cadastros = df_cadastros[df_cadastros["Nº Ext."] != num_final]
-                        df_cadastros = pd.concat([df_cadastros, pd.DataFrame([row_cad])], ignore_index=True)
-                else:
+            row_cad = {"Nº Ext.": num_final, "Localização": loc, "Tipo": tipo, "Carga (Kg/L)": carga, "Próx. Recarga": str(p_rec), "Próx. Teste": str(p_teste)}
+            row_insp = {"Data da Inspeção": str(dt_insp), "Nº Ext.": num_final, "Localização": loc, "Tipo": tipo, "Carga (Kg/L)": carga, "Funcionário": func, "Pesagem": pesagem, "Não Conformidades": nc, "Próx. Pesagem": str(p_pesagem), "Próx. Recarga": str(p_rec), "Próx. Teste": str(p_teste)}
+            
+            if ja_cadastrado:
+                if modo_edicao:
+                    # Se o modo edição está ativo, removemos a linha antiga e adicionamos a atualizada para evitar erros de tipo do Pandas
+                    df_cadastros = df_cadastros[df_cadastros["Nº Ext."] != num_final]
                     df_cadastros = pd.concat([df_cadastros, pd.DataFrame([row_cad])], ignore_index=True)
-                
-                df_inspecoes = pd.concat([df_inspecoes, pd.DataFrame([row_insp])], ignore_index=True)
-                conn.update(worksheet="Cadastros", data=df_cadastros)
-                conn.update(worksheet="Inspecoes", data=df_inspecoes)
-                
-                st.session_state.mensagem_sucesso = "🎉 Informações gravadas com sucesso! Dados sincronizados."
-                st.rerun()
+                # Se o modo edição estava desligado, mantém o cadastro intacto (apenas registra a nova inspeção)
+            else:
+                df_cadastros = pd.concat([df_cadastros, pd.DataFrame([row_cad])], ignore_index=True)
+            
+            df_inspecoes = pd.concat([df_inspecoes, pd.DataFrame([row_insp])], ignore_index=True)
+            conn.update(worksheet="Cadastros", data=df_cadastros)
+            conn.update(worksheet="Inspecoes", data=df_inspecoes)
+            
+            # DEFINIÇÃO DA MENSAGEM NA SESSÃO PARA APARECER APÓS O RERUN
+            st.session_state.mensagem_sucesso = "🎉 Informações gravadas com sucesso! Dados sincronizados."
+            st.rerun()
 
         # EXIBE A MENSAGEM NA TELA SE ELA EXISTIR NA SESSÃO
         if "mensagem_sucesso" in st.session_state:
