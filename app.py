@@ -181,8 +181,7 @@ with aba_hist:
     insp_disponiveis = ["Todos"] + list(df_inspecoes["Funcionário"].dropna().unique()) if not df_inspecoes.empty else ["Todos"]
     busca_insp = col5.selectbox("👤 Inspetor:", insp_disponiveis)
     
-    # Inserção das opções adicionais de filtro por proximidade de vencimento
-    busca_prazo = col6.selectbox("📅 Prazo", ["Todos", "Vencidos (Recarga)", "Próximos ao Vencimento (Recarga)", "Vencidos (Teste)", "Próximos ao Vencimento (Teste)"])
+    busca_prazo = col6.selectbox("📅 Prazo", ["Todos", "Vencidos (Recarga)", "Vencidos (Teste)"])
 
     # Aplicação dos Filtros no DataFrame de Visualização
     df_view = df_inspecoes.copy()
@@ -203,12 +202,8 @@ with aba_hist:
     
     if busca_prazo == "Vencidos (Recarga)":
         df_view = df_view[pd.to_datetime(df_view["Próx. Recarga"]).dt.date < hoje_filtrar]
-    elif busca_prazo == "Próximos ao Vencimento (Recarga)":
-        df_view = df_view[(pd.to_datetime(df_view["Próx. Recarga"]).dt.date >= hoje_filtrar) & (pd.to_datetime(df_view["Próx. Recarga"]).dt.date <= alerta_30_filtrar)]
     elif busca_prazo == "Vencidos (Teste)":
         df_view = df_view[pd.to_datetime(df_view["Próx. Teste"]).dt.date < hoje_filtrar]
-    elif busca_prazo == "Próximos ao Vencimento (Teste)":
-        df_view = df_view[(pd.to_datetime(df_view["Próx. Teste"]).dt.date >= hoje_filtrar) & (pd.to_datetime(df_view["Próx. Teste"]).dt.date <= alerta_30_filtrar)]
 
     # FUNÇÃO PARA ADICIONAR AS BOLINHAS DE ALERTA NO PADRÃO BRASILEIRO
     def aplicar_status_prazo(data_str):
